@@ -6,6 +6,11 @@
 //! a lattice over input positions. Viterbi over the lattice gives the
 //! whole-input conversion; edges starting at position 0 give the
 //! prefix-only candidates.
+//!
+//! History: a word the user chose for exactly the same symbols wins its span
+//! (it is lifted just above the span's best word) without making the lattice
+//! prefer splitting into learned pieces. A whole input the user committed
+//! before comes back first as-is.
 
 use std::collections::HashMap;
 
@@ -27,10 +32,9 @@ pub const SLOT_PARTIAL: f64 = -2.0;
 pub const SLOT_TONED_INCOMPLETE: f64 = -3.0;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
-/// Added once the user has chosen this word for exactly these symbols;
-/// large enough that a past choice beats the lexicon's own preference.
-pub const HISTORY_BASE: f64 = 12.0;
-/// Multiplies ln(times chosen), so the most-chosen word wins among learned ones.
+/// A learned word scores this much above the best word for the same symbols.
+pub const HISTORY_LIFT: f64 = 0.5;
+/// Plus this times ln(times chosen), so the most-chosen learned word wins.
 pub const HISTORY_WEIGHT: f64 = 1.0;
 /// Edge for an input symbol no word explains; shows the symbol itself.
 pub const UNKNOWN_SYMBOL: f64 = -50.0;
@@ -89,18 +93,30 @@ impl Engine {
 
         // best[i][j]: highest-scoring edge covering input[i..j], for Viterbi.
         let mut best: Vec<Vec<Option<Edge>>> = vec![vec![None; n + 1]; n];
-        let mut from_zero: Vec<Edge> = Vec::new();
+        let mut from_zero: Vec<(Edge, u32)> = Vec::new();
+        let mut learned: Vec<(Edge, u32)> = Vec::new();
         for start in 0..n {
             let mut slots = Vec::new();
-            self.walk(input, &spans, start, start, ROOT, &mut slots, &mut |edge| {
-                let cell = &mut best[edge.start][edge.end];
-                if cell.is_none_or(|c| edge.score > c.score) {
-                    *cell = Some(edge);
-                }
-                if edge.start == 0 {
-                    from_zero.push(edge);
-                }
-            });
+            self.walk(
+                input,
+                &spans,
+                start,
+                start,
+                ROOT,
+                &mut slots,
+                &mut |edge, used| {
+                    let cell = &mut best[edge.start][edge.end];
+                    if cell.is_none_or(|c| edge.score > c.score) {
+                        *cell = Some(edge);
+                    }
+                    if edge.start == 0 {
+                        from_zero.push((edge, used));
+                    }
+                    if used > 0 {
+                        learned.push((edge, used));
+                    }
+                },
+            );
             if best[start][start + 1].is_none() {
                 best[start][start + 1] = Some(Edge {
                     start,
@@ -108,6 +124,28 @@ impl Engine {
                     entry: None,
                     score: UNKNOWN_SYMBOL,
                 });
+            }
+        }
+
+        // Lift learned words above the best raw score of their span.
+        let lift = |edge: &Edge, used: u32, best: &[Vec<Option<Edge>>]| {
+            let top = best[edge.start][edge.end].map_or(edge.score, |c| c.score);
+            top.max(edge.score) + HISTORY_LIFT + HISTORY_WEIGHT * (used as f64).ln()
+        };
+        let raw_best = best.clone();
+        for (edge, used) in &learned {
+            let lifted = Edge {
+                score: lift(edge, *used, &raw_best),
+                ..*edge
+            };
+            let cell = &mut best[edge.start][edge.end];
+            if cell.is_none_or(|c| lifted.score > c.score) {
+                *cell = Some(lifted);
+            }
+        }
+        for (edge, used) in &mut from_zero {
+            if *used > 0 {
+                edge.score = lift(edge, *used, &raw_best);
             }
         }
 
@@ -120,7 +158,7 @@ impl Engine {
         // covering more input first, then by score.
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut prefix: Vec<Candidate> = Vec::new();
-        for edge in from_zero {
+        for (edge, _) in from_zero {
             let entry = self
                 .lexicon
                 .entry(edge.entry.expect("walk only yields words"));
@@ -156,23 +194,46 @@ impl Engine {
                 .then(b.score.total_cmp(&a.score))
         });
         candidates.extend(prefix);
+
+        // A whole input committed before comes back first.
+        let whole: String = input.iter().collect();
+        if let Some((text, _)) = self.history.learned(&whole).iter().max_by_key(|(_, n)| *n) {
+            candidates.retain(|c| c.text != *text);
+            candidates.insert(
+                0,
+                Candidate {
+                    text: text.clone(),
+                    consumed: n,
+                    score: f64::INFINITY,
+                    words: vec![Word {
+                        typed: whole.clone(),
+                        text: text.clone(),
+                    }],
+                },
+            );
+        }
         candidates.truncate(MAX_CANDIDATES);
         candidates
     }
 
-    /// Record that the user committed `text` for the start of `input`.
+    /// Record that the user committed `text` for the start of `input`: each
+    /// word it is made of, and the whole text when it spans several words.
+    /// `text` need not be a current candidate (e.g. a composition the user
+    /// built from several partial selections); then it is recorded for all
+    /// of `input`.
     pub fn learn(&mut self, input: &[char], text: &str) {
-        let words = self
-            .query(input)
-            .into_iter()
-            .find(|c| c.text == text)
-            .map(|c| c.words)
-            .unwrap_or_default();
-        let choices: Vec<(&str, &str)> = words
+        let (typed, words) = match self.query(input).into_iter().find(|c| c.text == text) {
+            Some(c) => (input[..c.consumed].iter().collect::<String>(), c.words),
+            None => (input.iter().collect(), Vec::new()),
+        };
+        let mut choices: Vec<(&str, &str)> = words
             .iter()
-            .filter(|w| !w.text.chars().any(crate::bopomofo::is_symbol))
             .map(|w| (w.typed.as_str(), w.text.as_str()))
             .collect();
+        if words.len() != 1 {
+            choices.push((&typed, text));
+        }
+        choices.retain(|(_, t)| !t.chars().any(crate::bopomofo::is_symbol));
         self.history.record(&choices);
     }
 
@@ -217,17 +278,29 @@ impl Engine {
         pos: usize,
         node: u32,
         slots: &mut Vec<(usize, usize)>,
-        emit: &mut dyn FnMut(Edge),
+        emit: &mut dyn FnMut(Edge, u32),
     ) {
         if !slots.is_empty() {
+            let learned = if self.history.is_empty() {
+                &[]
+            } else {
+                self.history
+                    .learned(&input[start..pos].iter().collect::<String>())
+            };
             for &id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
-                    emit(Edge {
+                    let text = &*self.lexicon.entry(id).text;
+                    let used = learned
+                        .iter()
+                        .find(|(t, _)| t == text)
+                        .map_or(0, |&(_, n)| n);
+                    let edge = Edge {
                         start,
                         end: pos,
                         entry: Some(id),
                         score,
-                    });
+                    };
+                    emit(edge, used);
                 }
             }
         }
@@ -271,13 +344,6 @@ impl Engine {
             };
             if toned && typed.len() < base.len() {
                 score += SLOT_TONED_INCOMPLETE;
-            }
-        }
-        if !self.history.is_empty() {
-            let typed = &input[slots[0].0..slots[slots.len() - 1].1];
-            let used = self.history.count(typed, &entry.text);
-            if used > 0 {
-                score += HISTORY_BASE + HISTORY_WEIGHT * (used as f64).ln();
             }
         }
         Some(score)
@@ -445,8 +511,32 @@ mod tests {
     fn learning_whole_conversion_records_each_word() {
         let mut e = engine();
         e.learn_str("ㄍㄗㄈㄈ", "工作方法");
-        let chars = |s: &str| s.chars().collect::<Vec<_>>();
-        assert_eq!(e.history.count(&chars("ㄍㄗ"), "工作"), 1);
-        assert_eq!(e.history.count(&chars("ㄈㄈ"), "方法"), 1);
+        assert_eq!(e.history.count("ㄍㄗ", "工作"), 1);
+        assert_eq!(e.history.count("ㄈㄈ", "方法"), 1);
+        assert_eq!(e.history.count("ㄍㄗㄈㄈ", "工作方法"), 1);
+    }
+
+    #[test]
+    fn learned_composition_comes_back_first() {
+        let mut e = engine();
+        assert_ne!(e.query_str("ㄍㄨㄈㄈ")[0].text, "感悟方法");
+        // Built from two partial selections, then learned as a whole.
+        e.learn_str("ㄍㄨㄈㄈ", "感悟");
+        e.learn_str("ㄈㄈ", "方法");
+        e.learn_str("ㄍㄨㄈㄈ", "感悟方法");
+        let c = e.query_str("ㄍㄨㄈㄈ");
+        assert_eq!(c[0].text, "感悟方法");
+        assert_eq!(c[0].consumed, 4);
+        assert_eq!(c.iter().filter(|c| c.text == "感悟方法").count(), 1);
+    }
+
+    #[test]
+    fn learned_single_character_does_not_hijack_other_input() {
+        let mut e = engine();
+        for _ in 0..5 {
+            e.learn_str("ㄍ", "古");
+        }
+        assert_eq!(e.query_str("ㄍ")[0].text, "古");
+        assert_eq!(e.query_str("ㄍㄗㄈㄈ")[0].text, "工作方法");
     }
 }
