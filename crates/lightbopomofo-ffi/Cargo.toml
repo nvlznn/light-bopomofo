@@ -1,0 +1,12 @@
+[package]
+name = "lightbopomofo-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "lightbopomofo_ffi"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+lightbopomofo-core = { path = "../lightbopomofo-core" }

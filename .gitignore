@@ -1,0 +1,4 @@
+/target/
+/data/*.csv
+/macos/build/
+.DS_Store

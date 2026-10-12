@@ -1,0 +1,12 @@
+[package]
+name = "lightbopomofo-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lb-cli"
+path = "src/main.rs"
+
+[dependencies]
+lightbopomofo-core = { path = "../lightbopomofo-core" }

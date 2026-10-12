@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/lightbopomofo-core",
+    "crates/lightbopomofo-ffi",
+    "crates/lightbopomofo-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/nvlznn/light-bopomofo"
+
+# Tests load the full lexicon; keep them fast.
+[profile.test]
+opt-level = 2
+
+[profile.release]
+panic = "unwind"
