@@ -22,6 +22,9 @@ pub const SLOT_FULL: f64 = 0.0;
 pub const SLOT_INITIAL: f64 = -0.5;
 /// Slot is longer than the first symbol but not complete (ㄍㄨ for 工).
 pub const SLOT_PARTIAL: f64 = -2.0;
+/// Extra for an incomplete slot that ends in a tone: a tone usually means the
+/// syllable is finished, so ㄧˋ should be 一 (ㄧˋ) before 頁 (ㄧㄝˋ).
+pub const SLOT_TONED_INCOMPLETE: f64 = -3.0;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
 /// Added once the user has chosen this word for exactly these symbols;
@@ -245,8 +248,10 @@ impl Engine {
         let mut score = self.lexicon.log_prob(id) + WORD_PENALTY;
         for (&(a, b), syl) in slots.iter().zip(entry.syllables.iter()) {
             let mut typed = &input[a..b];
+            let mut toned = false;
             if let Some((&last, rest)) = typed.split_last() {
                 if is_tone(last) {
+                    toned = true;
                     if syl.tone() != Some(last) {
                         return None;
                     }
@@ -264,6 +269,9 @@ impl Engine {
             } else {
                 SLOT_PARTIAL
             };
+            if toned && typed.len() < base.len() {
+                score += SLOT_TONED_INCOMPLETE;
+            }
         }
         if !self.history.is_empty() {
             let typed = &input[slots[0].0..slots[slots.len() - 1].1];

@@ -3,7 +3,7 @@
 //! Source format (chewing `tsi.csv`): `詞,頻率,ㄍㄨㄥ ㄗㄨㄛˋ` — one reading per
 //! character, first tone unmarked. Lines starting with `#` are metadata.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::bopomofo::{is_symbol, is_tone};
@@ -96,6 +96,7 @@ impl Lexicon {
                 lex.insert(entry);
             }
         }
+        rank_homophones(&mut lex.entries);
         let entries = &lex.entries;
         for node in &mut lex.nodes {
             node.entries
@@ -167,6 +168,54 @@ impl Lexicon {
     }
 }
 
+/// Two single-character frequencies within this ratio are treated as tied.
+const TIE_RATIO: f64 = 0.99;
+
+/// chewing flattens single-character frequencies into tiers: 的/得/地 are
+/// 147270/147269/147269 and 事 ties with 氏 and 嗜. Within each tier of
+/// homophones (same reading), reorder by how often the character occurs in
+/// multi-character words, reusing the tier's frequency values so overall
+/// scores keep their scale. Distinct tiers (嗎 26437 vs 媽 1 for ㄇㄚ˙) stay.
+fn rank_homophones(entries: &mut [Entry]) {
+    let mut in_words: HashMap<(char, Syllable), u64> = HashMap::new();
+    let mut groups: HashMap<Syllable, Vec<usize>> = HashMap::new();
+    for (i, e) in entries.iter().enumerate() {
+        if e.syllables.len() == 1 {
+            groups.entry(e.syllables[0]).or_default().push(i);
+        } else {
+            for (c, syl) in e.text.chars().zip(e.syllables.iter()) {
+                *in_words.entry((c, *syl)).or_insert(0) += e.freq as u64;
+            }
+        }
+    }
+    let usage = |e: &Entry| {
+        let c = e.text.chars().next().unwrap_or_default();
+        in_words.get(&(c, e.syllables[0])).copied().unwrap_or(0)
+    };
+    for mut group in groups.into_values() {
+        group.sort_by(|&a, &b| entries[b].freq.cmp(&entries[a].freq));
+        let mut start = 0;
+        while start < group.len() {
+            let top = entries[group[start]].freq as f64;
+            let mut end = start + 1;
+            while end < group.len() && entries[group[end]].freq as f64 >= top * TIE_RATIO {
+                end += 1;
+            }
+            let tier = &mut group[start..end];
+            let values: Vec<u32> = tier.iter().map(|&i| entries[i].freq).collect();
+            tier.sort_by_key(|&i| std::cmp::Reverse(usage(&entries[i])));
+            // Keep the new order strict even where values were equal.
+            let mut prev = u32::MAX;
+            for (&i, v) in tier.iter().zip(values) {
+                let v = v.min(prev.saturating_sub(1));
+                entries[i].freq = v;
+                prev = v;
+            }
+            start = end;
+        }
+    }
+}
+
 fn parse_line(line: &str) -> Option<Entry> {
     if line.starts_with('#') {
         return None;
@@ -207,6 +256,21 @@ mod tests {
         assert_eq!(&*lex.entry(lex.entries_at(g)[0]).text, "工");
         assert_eq!(&*lex.entry(lex.entries_at(gz)[0]).text, "工作");
         assert!(lex.child(ROOT, 'ㄗ').is_none());
+    }
+
+    #[test]
+    fn homophones_ranked_by_use_in_words() {
+        // 氏 and 事 tie; 事 appears in more words. 是 is a higher tier and stays.
+        let lex = Lexicon::parse(
+            "是,182405,ㄕˋ\n氏,52404,ㄕˋ\n事,52404,ㄕˋ\n故事,5000,ㄍㄨˋ ㄕˋ\n姓氏,100,ㄒㄧㄥˋ ㄕˋ\n",
+        );
+        let sh = lex.child(ROOT, 'ㄕ').unwrap();
+        let order: Vec<&str> = lex
+            .entries_at(sh)
+            .iter()
+            .map(|&i| &*lex.entry(i).text)
+            .collect();
+        assert_eq!(order, ["是", "事", "氏"]);
     }
 
     #[test]

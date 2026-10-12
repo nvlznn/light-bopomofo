@@ -85,3 +85,21 @@ fn long_input_is_fast() {
     }
     assert!(worst < Duration::from_millis(10), "worst query {worst:?}");
 }
+
+#[test]
+fn most_common_homophone_first() {
+    for (input, expected) in [
+        ("ㄒㄧㄥˊ", "行"),
+        ("ㄉㄜ˙", "的"),
+        ("ㄇㄚ˙", "嗎"),
+        ("ㄗㄞˋ", "在"),
+        ("ㄊㄚ", "他"),
+        ("ㄧˋ", "一"),
+        ("ㄕˋ", "是"),
+    ] {
+        assert_eq!(top(input, 1), [expected], "{input}");
+    }
+    // 事 was tied with rare characters like 氏 and 嗜.
+    let sh = top("ㄕˋ", 5);
+    assert!(sh.contains(&"事".to_string()), "{sh:?}");
+}
