@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>輕注音 Light Bopomofo</title>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+    <allowed-os-versions>
+        <os-version min="13.0"/>
+    </allowed-os-versions>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <choices-outline>
+        <line choice="app"/>
+    </choices-outline>
+    <choice id="app" visible="false">
+        <pkg-ref id="dev.noky.inputmethod.lightbopomofo.pkg"/>
+    </choice>
+    <pkg-ref id="dev.noky.inputmethod.lightbopomofo.pkg" version="__VERSION__">component.pkg</pkg-ref>
+</installer-gui-script>

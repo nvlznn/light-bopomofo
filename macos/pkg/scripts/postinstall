@@ -1,0 +1,13 @@
+#!/bin/sh
+# Register and enable the input source for the logged-in user.
+APP="/Library/Input Methods/LightBopomofo.app"
+user=$(/usr/bin/stat -f %Su /dev/console)
+if [ -n "$user" ] && [ "$user" != "root" ]; then
+    uid=$(/usr/bin/id -u "$user")
+    # A development build in the user's own Input Methods folder would shadow
+    # this one (same bundle ID); remove it.
+    home=$(/usr/bin/dscl . -read "/Users/$user" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+    /bin/rm -rf "$home/Library/Input Methods/LightBopomofo.app"
+    /bin/launchctl asuser "$uid" /usr/bin/sudo -u "$user" "$APP/Contents/MacOS/LightBopomofo" install || true
+fi
+exit 0

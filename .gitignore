@@ -2,3 +2,7 @@
 /data/*.csv
 /macos/build/
 .DS_Store
+
+/showreel/
+
+/dist/

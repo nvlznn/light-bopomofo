@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stop a running copy so the new one starts on next use.
+/usr/bin/pkill -x LightBopomofo || true
+/bin/rm -rf "/Library/Input Methods/LightBopomofo.app"
+exit 0

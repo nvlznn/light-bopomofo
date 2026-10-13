@@ -5,9 +5,7 @@ set -eu
 OUT="$ROOT/target/macos-tests"
 
 build_rust
-mkdir -p "$(dirname "$OUT")"
-# shellcheck disable=SC2086
-swiftc $SWIFT_FLAGS \
+swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_ffi \
     "$ROOT/macos/Sources/Engine.swift" "$ROOT/macos/Sources/Composer.swift" \
     "$ROOT/macos/Tests/main.swift" -o "$OUT"
 "$OUT" "$ROOT/data/tsi.csv"
