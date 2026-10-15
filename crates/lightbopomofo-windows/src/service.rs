@@ -97,11 +97,16 @@ impl TextService_Impl {
     /// Whether this key is ours. Must have no side effects: TSF asks first
     /// (OnTestKeyDown) and only then delivers the key (OnKeyDown).
     fn wants(&self, vk_code: u16) -> Option<Key> {
-        if !self.chinese.get() || caps_lock_on() {
+        if !self.chinese.get() {
             return None;
         }
         let key = keys::translate(vk_code, modifiers())?;
         let composing = !self.composer.borrow().is_empty();
+        if caps_lock_on() {
+            // Caps Lock types English; a composition left over is committed
+            // first instead of staying stuck in the document.
+            return composing.then_some(Key::Other);
+        }
         (composing || keys::starts_composition(&key)).then_some(key)
     }
 
@@ -344,8 +349,9 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
         guard("OnKeyUp", Ok(BOOL(0)), || {
             if self.shift.borrow_mut().key_up(wparam.0 as u16) {
                 self.set_chinese(!self.chinese.get(), pic.ok().ok().cloned());
-                return Ok(BOOL(1));
             }
+            // Never eat the key-up: the application must see Shift released,
+            // or it would keep treating letters as shifted.
             Ok(BOOL(0))
         })
     }
