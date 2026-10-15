@@ -81,6 +81,8 @@ using System.Runtime.InteropServices;
 public static class Fg {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
 }
 "@
     $page = "$env:TEMP\lb-textarea.html"
@@ -98,10 +100,18 @@ public static class Fg {
         if (-not $win) { Check "Edge: $($case.name)" $false "(Edge window not found)"; continue }
         [Fg]::SetForegroundWindow($win.MainWindowHandle) | Out-Null
         Start-Sleep -Milliseconds 800
-        foreach ($k in $case.keys) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds 200 }
-        Start-Sleep -Seconds 1
         $root = [System.Windows.Automation.AutomationElement]::FromHandle($win.MainWindowHandle)
         $isEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+        # Put the keyboard focus in the page's textarea (not the address bar).
+        $textarea = $null
+        foreach ($e in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isEdit)) {
+            try { if ($e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -notlike "*lb-textarea*") { $textarea = $e } } catch {}
+        }
+        if ($textarea) { try { $textarea.SetFocus() } catch { Write-Host "NOTE could not focus the textarea: $_" } } else { Write-Host "NOTE textarea not found" }
+        Start-Sleep -Milliseconds 500
+        Write-Host "NOTE Edge in the foreground: $([Fg]::GetForegroundWindow() -eq $win.MainWindowHandle)"
+        foreach ($k in $case.keys) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds 200 }
+        Start-Sleep -Seconds 1
         $values = @()
         foreach ($e in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isEdit)) {
             try { $values += $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch {}
@@ -153,9 +163,15 @@ Write-Host "== logs"
 $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"
 if (Test-Path $log) {
     Write-Host "---- ime.log (non-debug)"; Get-Content $log | Where-Object { $_ -notmatch " DEBUG " } | Select-Object -Last 40
-    Write-Host "---- ime.log debug lines by process (first 12 each)"
-    Get-Content $log | Where-Object { $_ -match " DEBUG " } | Group-Object { ($_ -split " ")[2] } |
-        ForEach-Object { Write-Host "-- $($_.Name)"; $_.Group | Select-Object -First 12 | ForEach-Object { Write-Host $_ } }
+    Write-Host "---- ime.log debug lines by process (from the last control's start, 25 each)"
+    Get-Content $log | Where-Object { $_ -match " (DEBUG|MARK) " } | Group-Object { ($_ -split " ")[2] } |
+        ForEach-Object {
+            $lines = @($_.Group)
+            $last = ($lines | Select-String " MARK " | Select-Object -Last 1)
+            $from = if ($last) { $last.LineNumber - 1 } else { [Math]::Max(0, $lines.Count - 25) }
+            Write-Host "-- $($_.Name)"
+            $lines[$from..([Math]::Min($lines.Count - 1, $from + 24))] | ForEach-Object { Write-Host $_ }
+        }
 } else { Write-Host "no ime.log" }
 if ($script:failures.Count -gt 0) {
     foreach ($l in "install", "update", "uninstall") {

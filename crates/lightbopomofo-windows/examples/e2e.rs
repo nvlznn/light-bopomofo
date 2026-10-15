@@ -394,8 +394,27 @@ mod imp {
         }
     }
 
+    /// A line in the input method's log, to tell which control a trace
+    /// belongs to.
+    fn mark(note: &str) {
+        let Some(dir) = std::env::var_os("LOCALAPPDATA") else {
+            return;
+        };
+        let path = std::path::PathBuf::from(dir).join("LightBopomofo\\logs\\ime.log");
+        let line = format!("0 MARK [{} e2e.exe] {note}\n", std::process::id());
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            use std::io::Write;
+            let _ = f.write_all(line.as_bytes());
+        }
+    }
+
     /// Run every scenario in `edit`; returns the number that failed.
     fn run_scenarios(label: &str, edit: HWND, inline: bool) -> i32 {
+        mark(&format!("start {label}"));
         let mut failed = 0;
         let mut saved = String::new();
         for (name, steps) in scenarios() {
