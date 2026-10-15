@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>輕注音輸入法 Light Bopomofo</title>
-<meta name="description" content="把 iPhone 注音的簡拼打法搬到電腦：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」。免費、開源、不連網。">
+<meta name="description" content="把 iPhone 注音的簡拼打法搬到電腦：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」。免費、開源，輸入法不連網。">
 <meta property="og:title" content="輕注音輸入法">
-<meta property="og:description" content="每個字只打第一個注音。ㄋㄏㄇ → 你好嗎。免費、開源、不連網。">
+<meta property="og:description" content="每個字只打第一個注音。ㄋㄏㄇ → 你好嗎。免費、開源，輸入法不連網。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lightbopomofo.noky.dev/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -108,6 +108,8 @@ kbd {
 
 section { padding: 56px 0; border-top: 1px solid var(--line); }
 section h2 { font-size: 28px; margin: 0 0 24px; }
+section > h3 { font-size: 18px; margin: 28px 0 8px; }
+section > h3:first-of-type { margin-top: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 20px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
 .card h3 { margin: 0 0 6px; font-size: 18px; }
@@ -161,12 +163,12 @@ footer p { margin: 4px 0; }
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.86-.76-1.47.02-2.83.86-3.59 2.17-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.32-3.5zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.65-1.05 1.68-.92 2.68.97.07 1.96-.5 2.56-1.23z"/></svg>
           下載 macOS 版 <small>免費</small>
         </a>
-        <span class="btn disabled" aria-disabled="true">
+        <a class="btn primary" href="https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo-Setup.exe">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>
-          Windows 版 <small>即將推出</small>
-        </span>
+          下載 Windows 版 <small>免費</small>
+        </a>
       </div>
-      <p class="meta">macOS 13 以上，Apple Silicon 與 Intel・開源・不連網</p>
+      <p class="meta">macOS 13 以上（Apple Silicon 與 Intel）・Windows 10／11・開源・輸入法不連網</p>
 
       <div class="demo" aria-label="打字示範">
         <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -194,7 +196,7 @@ footer p { margin: 4px 0; }
         <div class="card">
           <p class="example"><span class="bpmf">ㄋㄧˇㄏㄇ</span> → 你好嗎</p>
           <h3>完整注音、聲調都能混著打</h3>
-          <p>想打得更精確時，多打幾個符號或加上聲調（3 4 6 7），候選就會縮小。</p>
+          <p>想打得更精確時，多打幾個符號或加上聲調（空白鍵 3 4 6 7），候選就會縮小。</p>
         </div>
         <div class="card">
           <p class="example">越用越順手</p>
@@ -208,29 +210,41 @@ footer p { margin: 4px 0; }
       <h2>按鍵</h2>
       <p style="color:var(--muted);margin-top:-12px">鍵盤排列是大千（標準注音）。</p>
       <table class="keys">
-        <tr><td><kbd>空白</kbd> <kbd>Enter</kbd></td><td>送出選中的候選</td></tr>
-        <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>Tab</kbd></td><td>選擇候選</td></tr>
-        <tr><td><kbd>3</kbd> <kbd>4</kbd> <kbd>6</kbd> <kbd>7</kbd></td><td>聲調 ˇ ˋ ˊ ˙（可省略）</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>送出選中的候選</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>Tab</kbd></td><td>選擇候選；可以只選前段，剩下的接著選</td></tr>
+        <tr><td><kbd>Shift</kbd> + <kbd>1</kbd>–<kbd>9</kbd></td><td>直接送出這一頁的第幾個候選</td></tr>
+        <tr><td><kbd>[</kbd> <kbd>]</kbd> <kbd>PageUp</kbd> <kbd>PageDown</kbd></td><td>上一頁／下一頁候選</td></tr>
+        <tr><td>第三頁第一個候選</td><td>你打的注音本身，選它就直接打出注音符號</td></tr>
+        <tr><td><kbd>空白</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>6</kbd> <kbd>7</kbd></td><td>聲調 ˉ ˇ ˋ ˊ ˙（可省略）</td></tr>
         <tr><td><kbd>Backspace</kbd></td><td>刪掉最後一個注音</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>清空輸入區</td></tr>
-        <tr><td><kbd>Shift</kbd> + <kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd> <kbd>1</kbd> <kbd>;</kbd></td><td>，。？！：</td></tr>
+        <tr><td><kbd>Shift</kbd> + <kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd> <kbd>1</kbd> <kbd>;</kbd></td><td>，。？！：（組字中 Shift + 1 是選字）</td></tr>
         <tr><td><kbd>Caps Lock</kbd></td><td>暫時打英文</td></tr>
+        <tr><td>單按 <kbd>Shift</kbd></td><td>切換中／英（Windows）</td></tr>
       </table>
     </section>
 
     <section id="install">
       <h2>安裝</h2>
+      <h3>macOS</h3>
       <ol class="steps">
         <li>下載 <a href="https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo.dmg">LightBopomofo.dmg</a> 並打開，把「輕注音」拖到「應用程式」。</li>
         <li>打開「輕注音」。它會自動安裝並啟用輸入法，不需要管理員密碼。</li>
         <li>在選單列的輸入法選單選「輕注音」，就可以開始打字。</li>
         <li>如果選單裡沒有，「輕注音」App 會告訴你怎麼加入；也可以直接到「系統設定 → 鍵盤 → 輸入方式」按「＋」，在「繁體中文」底下加入「輕注音」。</li>
       </ol>
+      <h3>Windows</h3>
+      <ol class="steps">
+        <li>下載 <a href="https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo-Setup.exe">LightBopomofo-Setup.exe</a> 並執行。安裝檔還沒有程式碼簽署，Windows 會顯示「Windows 已保護您的電腦」：按「<b>其他資訊</b>」→「<b>仍要執行</b>」。</li>
+        <li>照指示安裝（需要管理員權限）。裝完會自動加入你的輸入法清單。</li>
+        <li>按 <kbd>Windows</kbd> + <kbd>空白鍵</kbd> 切換到「輕注音」就可以打字；單按 <kbd>Shift</kbd> 切換中／英。</li>
+        <li>開始功能表的「輕注音」可以查看狀態和選字紀錄。</li>
+      </ol>
 
       <div style="margin-top:28px">
         <details>
           <summary>會不會上傳我打的字？</summary>
-          <p>不會。輕注音完全不連網，所有計算都在你的電腦上完成。你選過的詞只存在本機，可以在「輕注音」App 的「選字紀錄」查看或刪除。</p>
+          <p>不會。輸入法完全不連網，所有計算都在你的電腦上完成。你選過的詞只存在本機，可以在「輕注音」App 的「選字紀錄」查看或刪除。唯一會連網的是「輕注音」App：它每天向 GitHub 查一次有沒有新版本，不傳送任何資料，可以在 App 裡關閉「自動檢查更新」。</p>
         </details>
         <details>
           <summary>選錯一次，那個字就一直排在前面怎麼辦？</summary>
@@ -242,15 +256,15 @@ footer p { margin: 4px 0; }
         </details>
         <details>
           <summary>怎麼解除安裝？</summary>
-          <p>打開「輕注音」App，按「解除安裝…」，再把 App 從「應用程式」移到垃圾桶。若也想刪除選字紀錄，先在「選字紀錄」按「全部清除…」。</p>
+          <p><b>macOS</b>：打開「輕注音」App，按「解除安裝…」，再把 App 從「應用程式」移到垃圾桶。<b>Windows</b>：設定 → 應用程式 → 輕注音 → 解除安裝。若也想刪除選字紀錄，先在 App 的「選字紀錄」按「全部清除…」。</p>
         </details>
         <details>
           <summary>怎麼更新？</summary>
-          <p>下載新版的 LightBopomofo.dmg，把「輕注音」拖到「應用程式」取代舊版，再打開一次就會自動更新輸入法。</p>
+          <p>有新版本時會跳出通知，按「更新」就會自動下載並安裝，輸入法會一起更新；Windows 不需要關閉其他程式或重新開機。也可以手動更新：<b>macOS</b> 下載新版的 LightBopomofo.dmg，把「輕注音」拖到「應用程式」取代舊版再打開一次；<b>Windows</b> 執行新版的 LightBopomofo-Setup.exe。</p>
         </details>
         <details>
-          <summary>Windows 版什麼時候出？</summary>
-          <p>正在開發中，會和 macOS 版共用同一個輸入引擎。完成後會放在這個網頁。</p>
+          <summary>Windows 有什麼限制？</summary>
+          <p>Windows 10 與 11 都可以用，支援一般（x64）與 32 位元程式。Arm 版 Windows 上，以模擬方式執行的 x64 程式暫時還不能使用輕注音（Arm 原生程式可以）。</p>
         </details>
         <details>
           <summary>遇到問題或想給建議？</summary>
@@ -279,13 +293,13 @@ footer p { margin: 4px 0; }
     { key: 's', marked: 'ㄋ', cands: ['年', '您', '你', '能', '內'] },
     { key: 'c', marked: 'ㄋㄏ', cands: ['女孩', '南韓', '你會', '農會', '你好'] },
     { key: 'a', marked: 'ㄋㄏㄇ', cands: ['你好嗎', '妳好嗎', '女孩', '南韓', '你會'] },
-    { key: '空白', commit: '你好嗎' },
+    { key: 'Enter', commit: '你好嗎' },
     { key: 'Shift ,', commit: '，' },
     { key: 'e', marked: 'ㄍ', cands: ['國', '高', '各', '給', '個'] },
     { key: 'y', marked: 'ㄍㄗ', cands: ['工作', '規則', '各自', '構造', '改造'] },
     { key: 'z', marked: 'ㄍㄗㄈ', cands: ['工作服', '高祖父', '改造法', '工作', '規則'] },
     { key: 'z', marked: 'ㄍㄗㄈㄈ', cands: ['工作方法', '工作服', '高祖父', '改造法', '工作'] },
-    { key: '空白', commit: '工作方法' },
+    { key: 'Enter', commit: '工作方法' },
     { key: 'Shift /', commit: '？' }
   ];
 
