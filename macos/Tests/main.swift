@@ -81,7 +81,8 @@ do {
 // Keys with an empty composition go to the app.
 do {
     let c = makeComposer()
-    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol("ˇ"), .symbol(Composer.firstTone)] {
+    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol("ˇ"), .symbol(Composer.firstTone),
+                .select(1), .pagePrevious, .pageNext, .abandon] {
         check(c.handle(key) == KeyResult(handled: false), "\(key) passes through when empty")
     }
 }
@@ -136,6 +137,46 @@ do {
     type(c, "ㄇㄚˇ")
     check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: true), "space after tone handled")
     check(c.composingText == "ㄇㄚˇ", "space after tone ignored")
+}
+
+// Shift+number commits that candidate of the page shown.
+do {
+    let c = makeComposer()
+    type(c, "ㄍㄗㄈㄈ")
+    let second = c.candidates[1]
+    check(c.handle(.select(2)) == KeyResult(handled: true, commit: second.text), "shift+2 commits #2")
+    check(c.symbols.count == 4 - second.consumed, "rest stays after shift+2")
+    c.reset()
+    type(c, "ㄍㄗㄈㄈ")
+    check(c.handle(.select(0)) == KeyResult(handled: true) && c.composingText == "ㄍㄗㄈㄈ", "select 0 ignored")
+}
+
+// Pages of nine.
+do {
+    let c = makeComposer()
+    type(c, "ㄕˋ")
+    let count = c.candidates.count
+    check(count > 2 * Composer.pageSize, "ㄕˋ has several pages")
+    _ = c.handle(.next)
+    check(c.handle(.pageNext).handled && c.selected == Composer.pageSize, "] goes to page 2")
+    let third = c.candidates[Composer.pageSize + 2].text
+    let d = makeComposer()
+    type(d, "ㄕˋ")
+    _ = d.handle(.pageNext)
+    check(d.handle(.select(3)) == KeyResult(handled: true, commit: third), "shift+3 on page 2")
+    _ = c.handle(.pagePrevious)
+    _ = c.handle(.pagePrevious)
+    check(c.selected == 0, "[ stops at page 1")
+    for _ in 0..<50 { _ = c.handle(.pageNext) }
+    check(c.selected == (count - 1) / Composer.pageSize * Composer.pageSize, "] stops at the last page")
+}
+
+// Switching to English drops the composition.
+do {
+    let c = makeComposer()
+    type(c, "ㄋㄏㄇ")
+    check(c.handle(.abandon) == KeyResult(handled: false), "abandon passes the key")
+    check(c.isEmpty && c.candidates.isEmpty, "abandon drops the composition")
 }
 
 // Very long input flushes instead of growing without bound.

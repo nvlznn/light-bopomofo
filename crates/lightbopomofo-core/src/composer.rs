@@ -20,10 +20,19 @@ pub enum Key {
     Previous,
     /// →, ↓, Tab.
     Next,
+    /// Shift+1–9 while composing: commit that candidate of the current page.
+    Select(usize),
+    /// [, PageUp.
+    PagePrevious,
+    /// ], PageDown.
+    PageNext,
     /// Full-width punctuation (Shift + , . / 1 ;).
     Punctuation(String),
     /// Anything else: commit the composition, then let the app have the key.
     Other,
+    /// Switched to English (Caps Lock): drop the composition, then let the
+    /// app have the key.
+    Abandon,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -48,6 +57,8 @@ impl KeyResult {
 }
 
 pub const MAX_SYMBOLS: usize = 40;
+/// Candidates per page of the candidate window, numbered 1–9.
+pub const PAGE_SIZE: usize = 9;
 
 #[derive(Default)]
 pub struct Composer {
@@ -149,6 +160,32 @@ impl Composer {
                 self.selected = (self.selected + 1).min(self.candidates.len().saturating_sub(1));
                 KeyResult::handled(String::new())
             }
+            Key::Select(n) => {
+                if self.is_empty() {
+                    return KeyResult::pass();
+                }
+                let index = self.selected / PAGE_SIZE * PAGE_SIZE + n.saturating_sub(1);
+                if n == 0 || n > PAGE_SIZE || index >= self.candidates.len() {
+                    return KeyResult::handled(String::new());
+                }
+                self.selected = index;
+                let text = self.commit_selected(engine);
+                KeyResult::handled(text)
+            }
+            Key::PagePrevious | Key::PageNext => {
+                if self.is_empty() {
+                    return KeyResult::pass();
+                }
+                let page = self.selected / PAGE_SIZE;
+                let last = self.candidates.len().saturating_sub(1) / PAGE_SIZE;
+                let page = if key == Key::PageNext {
+                    (page + 1).min(last)
+                } else {
+                    page.saturating_sub(1)
+                };
+                self.selected = page * PAGE_SIZE;
+                KeyResult::handled(String::new())
+            }
             Key::Punctuation(p) => {
                 let mut text = self.commit_all(engine);
                 text.push_str(&p);
@@ -158,6 +195,10 @@ impl Composer {
                 handled: false,
                 commit: self.commit_all(engine),
             },
+            Key::Abandon => {
+                self.reset();
+                KeyResult::pass()
+            }
         }
     }
 

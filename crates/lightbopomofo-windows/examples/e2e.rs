@@ -308,6 +308,20 @@ mod imp {
                 vec![space(), Expect(" ")],
             ),
             (
+                "Shift+2 commits the second candidate",
+                vec![
+                    Type("eyzz"),
+                    Key(VIRTUAL_KEY(b'2' as u16), Mod::Shift),
+                    ExpectInline("工作ㄈㄈ"),
+                    enter(),
+                    Expect("工作方法"),
+                ],
+            ),
+            (
+                "lone Shift while composing drops the bopomofo",
+                vec![Type("sca"), ShiftTap, Expect(""), ShiftTap],
+            ),
+            (
                 "lone Shift switches to English and back",
                 vec![
                     ShiftTap,

@@ -30,7 +30,7 @@ use windows_core::{w, PCWSTR};
 
 use crate::globals::{guard, module, wide, wide_nul};
 
-const PER_PAGE: usize = 9;
+const PER_PAGE: usize = lightbopomofo_core::composer::PAGE_SIZE;
 const CLASS: PCWSTR = w!("LightBopomofoCandidates");
 
 #[derive(Default)]

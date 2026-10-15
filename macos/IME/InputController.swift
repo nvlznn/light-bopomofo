@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import InputMethodKit
 import os
@@ -35,7 +36,7 @@ final class InputController: IMKInputController {
         guard let event, event.type == .keyDown, let composer,
               let client = sender as? IMKTextInput
         else { return false }
-        let result = composer.handle(Self.key(for: event))
+        let result = composer.handle(Self.key(for: event, composing: !composer.isEmpty))
         if !result.commit.isEmpty {
             client.insertText(result.commit, replacementRange: NSRange(location: NSNotFound, length: 0))
             showingMarkedText = false
@@ -53,7 +54,15 @@ final class InputController: IMKInputController {
     }
 
     override func deactivateServer(_ sender: Any!) {
-        commitComposition(sender)
+        // Switching apps commits; switching to another input method drops
+        // the bopomofo not chosen yet.
+        if Self.isSelected {
+            commitComposition(sender)
+        } else if let composer, !composer.isEmpty, let client = sender as? IMKTextInput {
+            log.info("input method switched: composition dropped")
+            composer.reset()
+            render(client)
+        }
         CandidatePanel.shared.hide()
         super.deactivateServer(sender)
     }
@@ -81,16 +90,32 @@ final class InputController: IMKInputController {
         CandidatePanel.shared.show(composer.candidates.map(\.text), selected: composer.selected, caret: caret)
     }
 
-    static func key(for event: NSEvent) -> Key {
+    /// Whether this input method is still the selected one (not when the
+    /// user switched to another).
+    static var isSelected: Bool {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyBundleID)
+        else { return true }
+        let id = Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+        return id == Bundle.main.bundleIdentifier
+    }
+
+    /// Number keys 1–9 by key code (the keypad's are separate keys).
+    private static let digits: [UInt16: Int] = [
+        18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
+    ]
+
+    static func key(for event: NSEvent, composing: Bool) -> Key {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // Shortcuts, Caps Lock English and keypad numbers go to the app.
-        // Arrow keys carry .numericPad too, so they are exempt from that one.
-        let isArrow = (123...126).contains(event.keyCode)
-        if !flags.isDisjoint(with: [.command, .control, .option, .capsLock])
-            || (flags.contains(.numericPad) && !isArrow)
+        // Shortcuts and keypad numbers go to the app. Arrows, PageUp and
+        // PageDown carry .numericPad too, so they are exempt from that one.
+        let isNavigation = (123...126).contains(event.keyCode) || [116, 121].contains(event.keyCode)
+        if !flags.isDisjoint(with: [.command, .control, .option])
+            || (flags.contains(.numericPad) && !isNavigation)
         {
             return .other
         }
+        if flags.contains(.capsLock) { return .abandon }  // Caps Lock types English
         switch event.keyCode {
         case 49: return .symbol(Composer.firstTone)  // space
         case 36, 76: return .commit  // return, keypad enter
@@ -99,9 +124,14 @@ final class InputController: IMKInputController {
         case 123, 126: return .previous  // ←, ↑
         case 124, 125: return .next  // →, ↓
         case 48: return flags.contains(.shift) ? .previous : .next  // tab
+        case 116: return .pagePrevious  // PageUp
+        case 121: return .pageNext  // PageDown
+        case 33 where !flags.contains(.shift): return .pagePrevious  // [
+        case 30 where !flags.contains(.shift): return .pageNext  // ]
         default: break
         }
         if flags.contains(.shift) {
+            if composing, let n = digits[event.keyCode] { return .select(n) }
             if let p = punctuation[event.characters ?? ""] { return .punctuation(p) }
             return .other
         }

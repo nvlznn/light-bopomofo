@@ -4,7 +4,7 @@
 use std::sync::OnceLock;
 
 use lightbopomofo_core::bopomofo::FIRST_TONE;
-use lightbopomofo_core::composer::{Composer, Key, KeyResult, MAX_SYMBOLS};
+use lightbopomofo_core::composer::{Composer, Key, KeyResult, MAX_SYMBOLS, PAGE_SIZE};
 use lightbopomofo_core::lexicon::{compile, Lexicon};
 use lightbopomofo_core::{Engine, History};
 
@@ -102,6 +102,10 @@ fn keys_pass_through_when_empty() {
         Key::Other,
         Key::Symbol('ˇ'),
         Key::Symbol(FIRST_TONE), // Space
+        Key::Select(1),
+        Key::PagePrevious,
+        Key::PageNext,
+        Key::Abandon,
     ] {
         assert_eq!(
             c.handle(&mut e, key.clone()),
@@ -193,4 +197,53 @@ fn space_after_a_tone_does_nothing() {
     assert_eq!(c.handle(&mut e, Key::Symbol(FIRST_TONE)), handled(""));
     assert_eq!(c.composing_text(), "ㄇㄚˇ");
     assert_eq!(first(&c), "馬");
+}
+
+#[test]
+fn shift_number_commits_that_candidate() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄍㄗㄈㄈ");
+    let second = c.candidates()[1].clone();
+    assert_eq!(c.handle(&mut e, Key::Select(2)), handled(&second.text));
+    assert_eq!(c.composing_text().chars().count(), 4 - second.consumed);
+    // Not a number on the page: nothing happens.
+    c.reset();
+    typing(&mut c, &mut e, "ㄍㄗㄈㄈ");
+    assert_eq!(c.handle(&mut e, Key::Select(0)), handled(""));
+    assert_eq!(c.composing_text(), "ㄍㄗㄈㄈ");
+}
+
+#[test]
+fn pages_of_nine() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄕˋ");
+    let count = c.candidates().len();
+    assert!(count > 2 * PAGE_SIZE);
+    c.handle(&mut e, Key::Next);
+    assert!(c.handle(&mut e, Key::PageNext).handled);
+    assert_eq!(c.selected(), PAGE_SIZE);
+    // Shift+number counts within the page shown.
+    let third = c.candidates()[PAGE_SIZE + 2].text.clone();
+    let mut d = Composer::new();
+    typing(&mut d, &mut e, "ㄕˋ");
+    d.handle(&mut e, Key::PageNext);
+    assert_eq!(d.handle(&mut e, Key::Select(3)), handled(&third));
+    // Back, and no further than the first page.
+    c.handle(&mut e, Key::PagePrevious);
+    assert_eq!(c.selected(), 0);
+    c.handle(&mut e, Key::PagePrevious);
+    assert_eq!(c.selected(), 0);
+    // No further than the last page.
+    for _ in 0..50 {
+        c.handle(&mut e, Key::PageNext);
+    }
+    assert_eq!(c.selected(), (count - 1) / PAGE_SIZE * PAGE_SIZE);
+}
+
+#[test]
+fn switching_language_drops_the_composition() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏㄇ");
+    assert_eq!(c.handle(&mut e, Key::Abandon), KeyResult::default());
+    assert!(c.is_empty() && c.candidates().is_empty());
 }

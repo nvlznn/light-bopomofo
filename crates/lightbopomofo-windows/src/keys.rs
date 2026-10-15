@@ -18,6 +18,8 @@ pub mod vk {
     pub const CAPITAL: u16 = 0x14;
     pub const ESCAPE: u16 = 0x1B;
     pub const SPACE: u16 = 0x20;
+    pub const PRIOR: u16 = 0x21; // PageUp
+    pub const NEXT: u16 = 0x22; // PageDown
     pub const LEFT: u16 = 0x25;
     pub const UP: u16 = 0x26;
     pub const RIGHT: u16 = 0x27;
@@ -33,6 +35,8 @@ pub mod vk {
     pub const OEM_MINUS: u16 = 0xBD; // - _
     pub const OEM_PERIOD: u16 = 0xBE; // . >
     pub const OEM_2: u16 = 0xBF; // / ?
+    pub const OEM_4: u16 = 0xDB; // [ {
+    pub const OEM_6: u16 = 0xDD; // ] }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -79,8 +83,9 @@ fn shifted_punctuation(vk: u16) -> Option<&'static str> {
 }
 
 /// Translate a key press. `None` for bare modifier keys, which must not
-/// affect the composition at all.
-pub fn translate(vk: u16, m: Modifiers) -> Option<Key> {
+/// affect the composition at all. While `composing`, Shift+1–9 choose a
+/// candidate (otherwise Shift+1 is ！).
+pub fn translate(vk: u16, m: Modifiers, composing: bool) -> Option<Key> {
     if is_modifier(vk) {
         return None;
     }
@@ -96,6 +101,11 @@ pub fn translate(vk: u16, m: Modifiers) -> Option<Key> {
         vk::RIGHT | vk::DOWN => Key::Next,
         vk::TAB if m.shift => Key::Previous,
         vk::TAB => Key::Next,
+        vk::PRIOR => Key::PagePrevious,
+        vk::NEXT => Key::PageNext,
+        vk::OEM_4 if !m.shift => Key::PagePrevious,
+        vk::OEM_6 if !m.shift => Key::PageNext,
+        0x31..=0x39 if m.shift && composing => Key::Select((vk - 0x30) as usize),
         vk::NUMPAD0..=vk::DIVIDE => Key::Other, // keypad numbers stay numbers
         _ if m.shift => match shifted_punctuation(vk) {
             Some(p) => Key::Punctuation(p.into()),
@@ -162,48 +172,77 @@ mod tests {
 
     #[test]
     fn dachen_by_position() {
-        assert_eq!(translate(b'S' as u16, NONE), Some(Key::Symbol('ㄋ')));
-        assert_eq!(translate(b'1' as u16, NONE), Some(Key::Symbol('ㄅ')));
-        assert_eq!(translate(b'3' as u16, NONE), Some(Key::Symbol('ˇ')));
-        assert_eq!(translate(vk::OEM_COMMA, NONE), Some(Key::Symbol('ㄝ')));
-        assert_eq!(translate(vk::OEM_2, NONE), Some(Key::Symbol('ㄥ')));
-        assert_eq!(translate(vk::OEM_MINUS, NONE), Some(Key::Symbol('ㄦ')));
+        assert_eq!(translate(b'S' as u16, NONE, false), Some(Key::Symbol('ㄋ')));
+        assert_eq!(translate(b'1' as u16, NONE, false), Some(Key::Symbol('ㄅ')));
+        assert_eq!(translate(b'3' as u16, NONE, false), Some(Key::Symbol('ˇ')));
+        assert_eq!(
+            translate(vk::OEM_COMMA, NONE, false),
+            Some(Key::Symbol('ㄝ'))
+        );
+        assert_eq!(translate(vk::OEM_2, NONE, false), Some(Key::Symbol('ㄥ')));
+        assert_eq!(
+            translate(vk::OEM_MINUS, NONE, false),
+            Some(Key::Symbol('ㄦ'))
+        );
     }
 
     #[test]
     fn editing_keys() {
-        assert_eq!(translate(vk::SPACE, NONE), Some(Key::Symbol(FIRST_TONE)));
-        assert_eq!(translate(vk::RETURN, NONE), Some(Key::Commit));
-        assert_eq!(translate(vk::BACK, NONE), Some(Key::Backspace));
-        assert_eq!(translate(vk::ESCAPE, NONE), Some(Key::Escape));
-        assert_eq!(translate(vk::RIGHT, NONE), Some(Key::Next));
-        assert_eq!(translate(vk::TAB, SHIFT), Some(Key::Previous));
+        assert_eq!(
+            translate(vk::SPACE, NONE, false),
+            Some(Key::Symbol(FIRST_TONE))
+        );
+        assert_eq!(translate(vk::RETURN, NONE, false), Some(Key::Commit));
+        assert_eq!(translate(vk::BACK, NONE, false), Some(Key::Backspace));
+        assert_eq!(translate(vk::ESCAPE, NONE, false), Some(Key::Escape));
+        assert_eq!(translate(vk::RIGHT, NONE, false), Some(Key::Next));
+        assert_eq!(translate(vk::TAB, SHIFT, false), Some(Key::Previous));
     }
 
     #[test]
     fn shift_punctuation_and_letters() {
         assert_eq!(
-            translate(vk::OEM_COMMA, SHIFT),
+            translate(vk::OEM_COMMA, SHIFT, false),
             Some(Key::Punctuation("，".into()))
         );
         assert_eq!(
-            translate(b'1' as u16, SHIFT),
+            translate(b'1' as u16, SHIFT, false),
             Some(Key::Punctuation("！".into()))
         );
         assert_eq!(
-            translate(vk::OEM_1, SHIFT),
+            translate(vk::OEM_1, SHIFT, false),
             Some(Key::Punctuation("：".into()))
         );
-        assert_eq!(translate(b'A' as u16, SHIFT), Some(Key::Other));
+        assert_eq!(translate(b'A' as u16, SHIFT, false), Some(Key::Other));
+    }
+
+    #[test]
+    fn choosing_and_paging() {
+        let shift_2 = translate(b'2' as u16, SHIFT, true);
+        assert_eq!(shift_2, Some(Key::Select(2)));
+        assert_eq!(translate(b'9' as u16, SHIFT, true), Some(Key::Select(9)));
+        // Not composing: Shift+1 is still ！, the others go to the app.
+        assert_eq!(
+            translate(b'1' as u16, SHIFT, false),
+            Some(Key::Punctuation("！".into()))
+        );
+        assert_eq!(translate(b'2' as u16, SHIFT, false), Some(Key::Other));
+        assert_eq!(translate(b'0' as u16, SHIFT, true), Some(Key::Other));
+        assert_eq!(translate(vk::OEM_4, NONE, true), Some(Key::PagePrevious));
+        assert_eq!(translate(vk::OEM_6, NONE, false), Some(Key::PageNext));
+        assert_eq!(translate(vk::PRIOR, NONE, true), Some(Key::PagePrevious));
+        assert_eq!(translate(vk::NEXT, NONE, true), Some(Key::PageNext));
+        assert_eq!(translate(vk::OEM_4, SHIFT, true), Some(Key::Other)); // {
+        assert!(!starts_composition(&Key::PageNext));
     }
 
     #[test]
     fn modifiers_and_keypad() {
-        assert_eq!(translate(vk::SHIFT, SHIFT), None);
-        assert_eq!(translate(vk::CONTROL, NONE), None);
+        assert_eq!(translate(vk::SHIFT, SHIFT, false), None);
+        assert_eq!(translate(vk::CONTROL, NONE, false), None);
         let ctrl = Modifiers { ctrl: true, ..NONE };
-        assert_eq!(translate(b'C' as u16, ctrl), Some(Key::Other));
-        assert_eq!(translate(vk::NUMPAD0 + 5, NONE), Some(Key::Other));
+        assert_eq!(translate(b'C' as u16, ctrl, false), Some(Key::Other));
+        assert_eq!(translate(vk::NUMPAD0 + 5, NONE, false), Some(Key::Other));
     }
 
     #[test]

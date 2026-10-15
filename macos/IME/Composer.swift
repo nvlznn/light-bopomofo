@@ -8,8 +8,12 @@ enum Key: Equatable {
     case escape
     case previous  // ←, ↑, Shift+Tab
     case next  // →, ↓, Tab
+    case select(Int)  // Shift+1–9 while composing: commit that candidate of the current page
+    case pagePrevious  // [, PageUp
+    case pageNext  // ], PageDown
     case punctuation(String)
     case other  // anything else: commit the composition, then let the app have it
+    case abandon  // switched to English (Caps Lock): drop the composition, let the app have it
 }
 
 struct KeyResult: Equatable {
@@ -23,6 +27,8 @@ struct KeyResult: Equatable {
 /// No InputMethodKit here, so it can be tested directly.
 final class Composer {
     static let maxSymbols = 40
+    /// Candidates per page of the candidate window, numbered 1–9.
+    static let pageSize = 9
     static let firstTone: Character = "ˉ"
     static let tones: Set<Character> = [firstTone, "ˊ", "ˇ", "ˋ", "˙"]
 
@@ -79,10 +85,27 @@ final class Composer {
             guard !isEmpty else { return KeyResult(handled: false) }
             selected = min(candidates.count - 1, selected + 1)
             return KeyResult(handled: true)
+        case .select(let n):
+            guard !isEmpty else { return KeyResult(handled: false) }
+            let index = selected / Composer.pageSize * Composer.pageSize + n - 1
+            guard (1...Composer.pageSize).contains(n), index < candidates.count else {
+                return KeyResult(handled: true)
+            }
+            selected = index
+            return KeyResult(handled: true, commit: commitSelected())
+        case .pagePrevious, .pageNext:
+            guard !isEmpty else { return KeyResult(handled: false) }
+            let page = selected / Composer.pageSize
+            let last = max(candidates.count - 1, 0) / Composer.pageSize
+            selected = (key == .pageNext ? min(page + 1, last) : max(page - 1, 0)) * Composer.pageSize
+            return KeyResult(handled: true)
         case .punctuation(let p):
             return KeyResult(handled: true, commit: commitAll() + p)
         case .other:
             return KeyResult(handled: false, commit: commitAll())
+        case .abandon:
+            reset()
+            return KeyResult(handled: false)
         }
     }
 

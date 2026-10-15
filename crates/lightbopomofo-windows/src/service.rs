@@ -100,12 +100,12 @@ impl TextService_Impl {
         if !self.chinese.get() {
             return None;
         }
-        let key = keys::translate(vk_code, modifiers())?;
         let composing = !self.composer.borrow().is_empty();
+        let key = keys::translate(vk_code, modifiers(), composing)?;
         if caps_lock_on() {
-            // Caps Lock types English; a composition left over is committed
-            // first instead of staying stuck in the document.
-            return composing.then_some(Key::Other);
+            // Caps Lock types English: a composition left over is dropped
+            // instead of staying stuck in the document.
+            return composing.then_some(Key::Abandon);
         }
         (composing || keys::starts_composition(&key)).then_some(key)
     }
@@ -175,25 +175,28 @@ impl TextService_Impl {
         unsafe { thread_mgr.GetFocus().ok()?.GetTop().ok() }
     }
 
-    /// Switch Chinese/English, committing what is being composed.
+    /// Switch Chinese/English, dropping what is being composed.
     fn set_chinese(&self, chinese: bool, context: Option<ITfContext>) {
         if self.chinese.get() == chinese {
             return;
         }
-        if !chinese && !self.composer.borrow().is_empty() {
-            let text = match globals::engine() {
-                Some(mut engine) => self.composer.borrow_mut().commit_all(&mut engine),
-                None => String::new(),
-            };
-            if let Some(context) = context.or_else(|| self.focused_context()) {
-                let _ = self.render(&context, text);
-            } else {
-                self.composer.borrow_mut().reset();
-                candidates::hide();
-            }
+        if !chinese {
+            self.abandon(context);
         }
         self.chinese.set(chinese);
         self.publish_mode();
+    }
+
+    /// Drop the composition and erase its bopomofo from the document.
+    fn abandon(&self, context: Option<ITfContext>) {
+        if self.composer.borrow().is_empty() {
+            return;
+        }
+        self.composer.borrow_mut().reset();
+        candidates::hide();
+        if let Some(context) = context.or_else(|| self.focused_context()) {
+            let _ = self.render(&context, String::new());
+        }
     }
 
     /// Tell Windows our mode, for the 中/英 indicator on the taskbar.
@@ -271,6 +274,8 @@ impl TextService_Impl {
     }
 
     fn deactivate(&self) -> Result<()> {
+        // Switched to another input method: unchosen bopomofo goes away.
+        self.abandon(None);
         candidates::destroy();
         self.composer.borrow_mut().reset();
         self.composition.forget();

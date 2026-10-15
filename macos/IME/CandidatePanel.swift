@@ -3,7 +3,7 @@ import Cocoa
 /// Horizontal candidate strip near the caret: up to 9 per page, numbered.
 final class CandidatePanel {
     static let shared = CandidatePanel()
-    static let perPage = 9
+    static let perPage = Composer.pageSize
 
     private let panel: NSPanel
     private let view = CandidateView()

@@ -15,9 +15,11 @@ struct GeneralView: View {
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                         KeyRow(keys: "Enter", action: "送出選中的候選")
                         KeyRow(keys: "← →／Tab", action: "選擇候選；可以只選前段，剩下的接著選")
+                        KeyRow(keys: "Shift + 1–9", action: "直接送出這一頁的第幾個候選")
+                        KeyRow(keys: "[ ]／PageUp PageDown", action: "上一頁／下一頁候選")
                         KeyRow(keys: "空白 3 4 6 7", action: "聲調 ˉ ˇ ˋ ˊ ˙（可省略）")
                         KeyRow(keys: "Backspace／Esc", action: "刪除一個注音／清空")
-                        KeyRow(keys: "Shift + , . / 1 ;", action: "，。？！：")
+                        KeyRow(keys: "Shift + , . / 1 ;", action: "，。？！：（組字中 Shift + 1 是選字）")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

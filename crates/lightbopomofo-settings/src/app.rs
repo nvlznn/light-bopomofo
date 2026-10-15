@@ -602,8 +602,9 @@ fn create(hwnd: HWND) {
             st,
             "打法：每個字只打第一個注音，例如 ㄋㄏㄇ → 你好嗎、ㄍㄗㄈㄈ → 工作方法。\n\
              Enter 送出　← → 或 Tab 選字（可以只選前段，剩下的接著選）\n\
+             Shift + 1–9 直接選這一頁的第幾個　[ ] 或 PageUp／PageDown 換頁\n\
              空白鍵 3 4 6 7 聲調（可省略）　Backspace 刪除　Esc 清空\n\
-             Shift + , . / 1 ; 打出 ，。？！：　單按 Shift 切換中／英",
+             Shift + , . / 1 ; 打出 ，。？！：　單按 Shift 切換中／英（沒選的注音會清掉）",
             0,
             0,
             0,
