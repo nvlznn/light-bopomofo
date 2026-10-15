@@ -11,9 +11,7 @@ enum SharedEngine {
             log.error("lexicon tsi.csv missing from bundle")
             return nil
         }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let history = support.appendingPathComponent("LightBopomofo/history.tsv").path
-        let engine = Engine(lexiconPath: lexicon, historyPath: history)
+        let engine = Engine(lexiconPath: lexicon, historyPath: UserData.historyPath)
         if engine == nil { log.error("engine failed to load \(lexicon, privacy: .public)") }
         return engine
     }()

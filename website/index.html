@@ -221,16 +221,20 @@ footer p { margin: 4px 0; }
     <section id="install">
       <h2>安裝</h2>
       <ol class="steps">
-        <li>下載 <a href="https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo.dmg">LightBopomofo.dmg</a> 並打開。</li>
-        <li>雙擊裡面的「輕注音」，按「安裝」。不需要管理員密碼。</li>
+        <li>下載 <a href="https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo.dmg">LightBopomofo.dmg</a> 並打開，把「輕注音」拖到「應用程式」。</li>
+        <li>打開「輕注音」。它會自動安裝並啟用輸入法，不需要管理員密碼。</li>
         <li>在選單列的輸入法選單選「輕注音」，就可以開始打字。</li>
-        <li>如果選單裡沒有，到「系統設定 → 鍵盤 → 輸入方式」按「＋」，在「繁體中文」底下加入「輕注音」；仍然沒有的話，登出再登入一次。</li>
+        <li>如果選單裡沒有，「輕注音」App 會告訴你怎麼加入；也可以直接到「系統設定 → 鍵盤 → 輸入方式」按「＋」，在「繁體中文」底下加入「輕注音」。</li>
       </ol>
 
       <div style="margin-top:28px">
         <details>
           <summary>會不會上傳我打的字？</summary>
-          <p>不會。輕注音完全不連網，所有計算都在你的電腦上完成。你選過的詞記錄在 <code>~/Library/Application Support/LightBopomofo/history.tsv</code>，只存在本機。</p>
+          <p>不會。輕注音完全不連網，所有計算都在你的電腦上完成。你選過的詞只存在本機，可以在「輕注音」App 的「選字紀錄」查看或刪除。</p>
+        </details>
+        <details>
+          <summary>選錯一次，那個字就一直排在前面怎麼辦？</summary>
+          <p>打開「輕注音」App，在「選字紀錄」找到那一筆刪掉，馬上就會恢復。</p>
         </details>
         <details>
           <summary>和內建注音、新酷音有什麼不同？</summary>
@@ -238,11 +242,11 @@ footer p { margin: 4px 0; }
         </details>
         <details>
           <summary>怎麼解除安裝？</summary>
-          <p>再打開一次 LightBopomofo.dmg，雙擊「輕注音」，選「解除安裝…」。若也想刪除選字紀錄，刪除 <code>~/Library/Application Support/LightBopomofo</code>。</p>
+          <p>打開「輕注音」App，按「解除安裝…」，再把 App 從「應用程式」移到垃圾桶。若也想刪除選字紀錄，先在「選字紀錄」按「全部清除…」。</p>
         </details>
         <details>
           <summary>怎麼更新？</summary>
-          <p>下載新版的 LightBopomofo.dmg，雙擊「輕注音」，按「更新」。</p>
+          <p>下載新版的 LightBopomofo.dmg，把「輕注音」拖到「應用程式」取代舊版，再打開一次就會自動更新輸入法。</p>
         </details>
         <details>
           <summary>Windows 版什麼時候出？</summary>

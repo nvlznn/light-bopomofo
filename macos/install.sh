@@ -1,9 +1,8 @@
 #!/bin/sh
-# Development install: run the freshly built app's own installer, which
+# Development install: run the bundled input method's installer, which
 # copies it into ~/Library/Input Methods, restarts it and registers it —
-# the same code path users get from the disk image.
+# the code path the app uses for users.
 set -eu
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-APP="$ROOT/macos/build/LightBopomofo.app"
-[ -d "$APP" ] || { echo "run macos/build.sh first"; exit 1; }
-"$APP/Contents/MacOS/LightBopomofo" install
+. "$(dirname "$0")/common.sh"
+[ -d "$IME" ] || { echo "run macos/build.sh first"; exit 1; }
+"$IME/Contents/MacOS/LightBopomofo" install

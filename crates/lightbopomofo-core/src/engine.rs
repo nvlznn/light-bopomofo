@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 
 use crate::bopomofo::is_tone;
-use crate::history::History;
+use crate::history::{History, HistoryEntry};
 use crate::lexicon::{Lexicon, MAX_SYLLABLE_LEN, ROOT};
 
 // Ranking weights. Scores are roughly log-probabilities: the word's unigram
@@ -197,7 +197,13 @@ impl Engine {
 
         // A whole input committed before comes back first.
         let whole: String = input.iter().collect();
-        if let Some((text, _)) = self.history.learned(&whole).iter().max_by_key(|(_, n)| *n) {
+        if let Some(text) = self
+            .history
+            .learned(&whole)
+            .iter()
+            .max_by_key(|l| (l.count, l.last_used))
+            .map(|l| &l.text)
+        {
             candidates.retain(|c| c.text != *text);
             candidates.insert(
                 0,
@@ -239,6 +245,25 @@ impl Engine {
 
     pub fn learn_str(&mut self, input: &str, text: &str) {
         self.learn(&input.chars().collect::<Vec<_>>(), text);
+    }
+
+    /// Everything the engine has learned, most recent first.
+    pub fn history_entries(&self) -> Vec<HistoryEntry> {
+        self.history.entries()
+    }
+
+    /// Forget one learned choice; returns whether it existed.
+    pub fn forget(&mut self, typed: &str, text: &str) -> std::io::Result<bool> {
+        self.history.forget(typed, text)
+    }
+
+    pub fn clear_history(&mut self) -> std::io::Result<()> {
+        self.history.clear()
+    }
+
+    /// Re-read the history file after another process changed it.
+    pub fn reload_history(&mut self) {
+        self.history.reload();
     }
 
     /// For each position, the end positions of valid slots starting there.
@@ -292,8 +317,8 @@ impl Engine {
                     let text = &*self.lexicon.entry(id).text;
                     let used = learned
                         .iter()
-                        .find(|(t, _)| t == text)
-                        .map_or(0, |&(_, n)| n);
+                        .find(|l| &*l.text == text)
+                        .map_or(0, |l| l.count);
                     let edge = Edge {
                         start,
                         end: pos,
@@ -528,6 +553,22 @@ mod tests {
         assert_eq!(c[0].text, "感悟方法");
         assert_eq!(c[0].consumed, 4);
         assert_eq!(c.iter().filter(|c| c.text == "感悟方法").count(), 1);
+    }
+
+    #[test]
+    fn forgetting_undoes_learning() {
+        let mut e = engine();
+        e.learn_str("ㄍㄨ", "感悟");
+        assert_eq!(e.query_str("ㄍㄨ")[0].text, "感悟");
+        assert!(e
+            .history_entries()
+            .iter()
+            .any(|h| h.typed == "ㄍㄨ" && h.text == "感悟"));
+        assert!(e.forget("ㄍㄨ", "感悟").unwrap());
+        assert_ne!(e.query_str("ㄍㄨ")[0].text, "感悟");
+        e.learn_str("ㄍㄨ", "感悟");
+        e.clear_history().unwrap();
+        assert!(e.history_entries().is_empty());
     }
 
     #[test]

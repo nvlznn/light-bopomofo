@@ -6,8 +6,6 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>LightBopomofo</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.noky.inputmethod.lightbopomofo</string>
 	<key>CFBundleInfoDictionaryVersion</key>

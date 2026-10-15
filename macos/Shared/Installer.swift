@@ -88,6 +88,18 @@ struct Installer {
         }
     }
 
+    /// Whether the input source is registered and switched on in the
+    /// user's input sources (selectable from the menu bar).
+    var isEnabled: Bool {
+        inputSources().contains { source in
+            func flag(_ key: CFString) -> Bool {
+                guard let raw = TISGetInputSourceProperty(source, key) else { return false }
+                return CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(raw).takeUnretainedValue())
+            }
+            return flag(kTISPropertyInputSourceIsSelectCapable) && flag(kTISPropertyInputSourceIsEnabled)
+        }
+    }
+
     // MARK: - System
 
     private func register() throws {

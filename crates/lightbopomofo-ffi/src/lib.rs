@@ -13,6 +13,9 @@ use lightbopomofo_core::{dachen, Engine, History, Lexicon};
 
 pub struct LbEngine(Engine);
 
+/// Just the history file, for the settings app (no lexicon loaded).
+pub struct LbHistory(History);
+
 /// Run `f`, turning a panic into `fallback`.
 fn guard<T>(fallback: T, f: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or(fallback)
@@ -100,6 +103,109 @@ pub unsafe extern "C" fn lb_learn(
         {
             engine.0.learn_str(symbols, text);
         }
+    })
+}
+
+/// Re-read the history file after another process (the settings app)
+/// changed it.
+///
+/// # Safety
+/// `engine` must be NULL or from `lb_engine_new`.
+#[no_mangle]
+pub unsafe extern "C" fn lb_reload_history(engine: *mut LbEngine) {
+    guard((), || {
+        if let Some(engine) = engine.as_mut() {
+            engine.0.reload_history();
+        }
+    })
+}
+
+/// Open a history file for viewing and editing. NULL on bad arguments.
+///
+/// # Safety
+/// `path` must be NULL or a NUL-terminated string.
+#[no_mangle]
+pub unsafe extern "C" fn lb_history_open(path: *const c_char) -> *mut LbHistory {
+    guard(ptr::null_mut(), || match str_arg(path) {
+        Some(path) => Box::into_raw(Box::new(LbHistory(History::load(path)))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// # Safety
+/// `history` must be NULL or from `lb_history_open`, and not used afterwards.
+#[no_mangle]
+pub unsafe extern "C" fn lb_history_free(history: *mut LbHistory) {
+    if !history.is_null() {
+        guard((), || drop(Box::from_raw(history)));
+    }
+}
+
+/// Re-read the file, then list every entry, most recent first, as JSON:
+/// `[{"typed":"ㄋㄏㄇ","text":"你好嗎","count":3,"last_used":1760000000}, ...]`.
+///
+/// # Safety
+/// `history` must be from `lb_history_open`.
+#[no_mangle]
+pub unsafe extern "C" fn lb_history_json(history: *mut LbHistory) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(history) = history.as_mut() else {
+            return ptr::null_mut();
+        };
+        history.0.reload();
+        let mut json = String::from("[");
+        for (i, e) in history.0.entries().iter().enumerate() {
+            if i > 0 {
+                json.push(',');
+            }
+            json.push_str("{\"typed\":");
+            push_json_string(&mut json, &e.typed);
+            json.push_str(",\"text\":");
+            push_json_string(&mut json, &e.text);
+            json.push_str(&format!(
+                ",\"count\":{},\"last_used\":{}}}",
+                e.count, e.last_used
+            ));
+        }
+        json.push(']');
+        CString::new(json).map_or(ptr::null_mut(), CString::into_raw)
+    })
+}
+
+/// Forget one entry. Returns 1 if removed, 0 if not found, -1 on error.
+///
+/// # Safety
+/// `history` from `lb_history_open`; strings NULL or NUL-terminated.
+#[no_mangle]
+pub unsafe extern "C" fn lb_history_forget(
+    history: *mut LbHistory,
+    typed: *const c_char,
+    text: *const c_char,
+) -> i32 {
+    guard(-1, || {
+        let (Some(history), Some(typed), Some(text)) =
+            (history.as_mut(), str_arg(typed), str_arg(text))
+        else {
+            return -1;
+        };
+        history.0.reload();
+        match history.0.forget(typed, text) {
+            Ok(true) => 1,
+            Ok(false) => 0,
+            Err(_) => -1,
+        }
+    })
+}
+
+/// Forget everything. Returns 0 on success, -1 on error.
+///
+/// # Safety
+/// `history` must be from `lb_history_open`.
+#[no_mangle]
+pub unsafe extern "C" fn lb_history_clear(history: *mut LbHistory) -> i32 {
+    guard(-1, || match history.as_mut().map(|h| h.0.clear()) {
+        Some(Ok(())) => 0,
+        _ => -1,
     })
 }
 
@@ -211,6 +317,53 @@ mod tests {
         assert_eq!(lb_dachen('3' as u32), 'ˇ' as u32);
         assert_eq!(lb_dachen(' ' as u32), 0);
         assert_eq!(lb_dachen(0xD800), 0);
+    }
+
+    #[test]
+    fn history_handle_lists_forgets_and_clears() {
+        let dir = std::env::temp_dir().join(format!("lb-ffi-history-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = CString::new(dir.join("history.tsv").to_str().unwrap()).unwrap();
+        let lex = lexicon_file();
+        unsafe {
+            // The input method learns; the settings app sees and edits it.
+            let e = lb_engine_new(lex.as_ptr(), path.as_ptr());
+            lb_learn(e, c"ㄋㄏㄇ".as_ptr(), c"你好嗎".as_ptr());
+            let h = lb_history_open(path.as_ptr());
+            let json = take(lb_history_json(h));
+            assert!(
+                json.contains("\"typed\":\"ㄋㄏㄇ\",\"text\":\"你好嗎\",\"count\":1"),
+                "{json}"
+            );
+            assert_eq!(
+                lb_history_forget(h, c"ㄋㄏㄇ".as_ptr(), c"你好嗎".as_ptr()),
+                1
+            );
+            assert_eq!(
+                lb_history_forget(h, c"ㄋㄏㄇ".as_ptr(), c"你好嗎".as_ptr()),
+                0
+            );
+            assert_eq!(take(lb_history_json(h)), "[]");
+
+            // The engine forgets after reloading.
+            lb_reload_history(e);
+            lb_learn(e, c"ㄋ".as_ptr(), c"你".as_ptr());
+            assert_eq!(lb_history_clear(h), 0);
+            assert_eq!(take(lb_history_json(h)), "[]");
+
+            assert!(lb_history_open(ptr::null()).is_null());
+            assert!(lb_history_json(ptr::null_mut()).is_null());
+            assert_eq!(
+                lb_history_forget(ptr::null_mut(), ptr::null(), ptr::null()),
+                -1
+            );
+            assert_eq!(lb_history_clear(ptr::null_mut()), -1);
+            lb_reload_history(ptr::null_mut());
+            lb_history_free(ptr::null_mut());
+            lb_history_free(h);
+            lb_engine_free(e);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

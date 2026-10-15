@@ -1,12 +1,12 @@
 #!/bin/sh
-# Composer tests against the real engine (no InputMethodKit involved).
+# Composer and installer tests against the real engine (no InputMethodKit,
+# nothing installed).
 set -eu
 . "$(dirname "$0")/common.sh"
 OUT="$ROOT/target/macos-tests"
 
 build_rust
 swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_ffi \
-    "$ROOT/macos/Sources/Engine.swift" "$ROOT/macos/Sources/Composer.swift" \
-    "$ROOT/macos/Sources/Installer.swift" \
-    "$ROOT/macos/Tests/main.swift" -o "$OUT"
+    "$ROOT/macos/Shared/Engine.swift" "$ROOT/macos/Shared/Installer.swift" \
+    "$ROOT/macos/IME/Composer.swift" "$ROOT/macos/Tests/main.swift" -o "$OUT"
 "$OUT" "$ROOT/data/tsi.csv"
