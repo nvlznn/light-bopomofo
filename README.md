@@ -41,7 +41,7 @@ macos/release.sh      # 簽署、公證、staple；加 --publish 建立 GitHub R
 若沒有出現，登出再登入一次。除錯 log：
 
 ```sh
-log stream --info --predicate 'subsystem == "dev.noky.inputmethod.lightbopomofo"'
+/usr/bin/log stream --info --predicate 'subsystem == "dev.noky.inputmethod.lightbopomofo"'
 ```
 
 使用者紀錄存在 `~/Library/Application Support/LightBopomofo/history.tsv`，只在本機；App 刪除紀錄後會通知輸入法重新載入。
