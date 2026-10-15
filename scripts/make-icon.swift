@@ -5,6 +5,9 @@
 //       app icon: white rounded square with a black glyph
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
 //       the same, as a Windows icon (16–256 px)
+//   swift scripts/make-icon.swift input-ico windows/lightbopomofo-input.ico
+//       Windows taskbar input indicator: white glyph on transparent, sized
+//       like the macOS input-source icon (Windows doesn't recolour it)
 import AppKit
 
 func bitmap(_ px: Int, points: CGFloat, draw: () -> Void) -> NSBitmapImageRep {
@@ -81,10 +84,16 @@ func appIcon(_ out: String) {
     iconutil.waitUntilExit()
 }
 
+/// The taskbar icon at `px` pixels: white glyph filling the box, no background.
+func inputIconRep(_ px: Int) -> NSBitmapImageRep {
+    bitmap(px, points: 16) {
+        glyph(size: 14.5, color: .white, in: 16, weight: .medium, dy: 0.5)
+    }
+}
+
 /// Windows .ico: a directory of PNG images (supported since Windows Vista).
-func windowsIcon(_ out: String) {
-    let sizes = [16, 20, 24, 32, 40, 48, 64, 256]
-    let pngs = sizes.map { appIconRep($0).representation(using: .png, properties: [:])! }
+func windowsIcon(_ out: String, sizes: [Int], rep: (Int) -> NSBitmapImageRep) {
+    let pngs = sizes.map { rep($0).representation(using: .png, properties: [:])! }
     var data = Data()
     func u16(_ v: Int) { data.append(contentsOf: [UInt8(v & 0xff), UInt8(v >> 8 & 0xff)]) }
     func u32(_ v: Int) { u16(v & 0xffff); u16(v >> 16) }
@@ -105,6 +114,7 @@ func windowsIcon(_ out: String) {
 switch CommandLine.arguments[1] {
 case "menu": menuIcon(CommandLine.arguments[2])
 case "app": appIcon(CommandLine.arguments[2])
-case "ico": windowsIcon(CommandLine.arguments[2])
-default: fatalError("usage: make-icon.swift menu|app|ico OUTPUT")
+case "ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64, 256], rep: appIconRep)
+case "input-ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep)
+default: fatalError("usage: make-icon.swift menu|app|ico|input-ico OUTPUT")
 }

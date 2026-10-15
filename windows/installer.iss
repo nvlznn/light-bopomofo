@@ -2,7 +2,7 @@
 ; Built by windows/build.ps1 (locally) or CI from a staging folder:
 ;   stage\x64\lightbopomofo.dll    stage\x86\lightbopomofo.dll    stage\arm64\lightbopomofo.dll
 ;   stage\x64\LightBopomofo.exe    stage\arm64\LightBopomofo.exe
-;   stage\lexicon.bin  stage\lightbopomofo.ico  stage\licenses\*
+;   stage\lexicon.bin  stage\lightbopomofo.ico  stage\lightbopomofo-input.ico  stage\licenses\*
 ; iscc /DAppVersion=0.1.0 /DStage=path\to\stage /DOutput=path\to\dist installer.iss
 
 #ifndef AppVersion
@@ -51,6 +51,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 ; Shared data. lexicon.bin is compiled from the chewing tsi.csv shipped in licenses\.
 Source: "{#Stage}\lexicon.bin"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\lightbopomofo.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Stage}\lightbopomofo-input.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 ; The input method, one DLL per architecture of the applications that load it.
 ; On Arm64, x64 applications (emulated) share the 64-bit registration with

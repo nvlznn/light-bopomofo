@@ -1,4 +1,4 @@
-**輕注音 2.0**：Windows 的候選視窗換上和 macOS 一致的外觀。
+**輕注音 2.0**：Windows 的候選視窗和工作列圖示換上和 macOS 一致的外觀。
 
 ## 下載
 - **macOS 13 以上**（Apple Silicon 與 Intel）：`LightBopomofo.dmg`，把「輕注音」拖到「應用程式」並打開。
@@ -17,6 +17,7 @@
 
 ## 這一版的改進
 - Windows：候選視窗改用和 macOS 一致的配色，候選字改成半粗體，更好讀
+- Windows：工作列上的「輕」圖示改成和 macOS 一樣只有字、沒有白底，字也大了一倍
 
 ## 已知限制
 - Arm 版 Windows 上，以模擬方式執行的 x64 程式暫時還不能使用輕注音（Arm 原生程式可以）。

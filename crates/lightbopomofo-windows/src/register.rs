@@ -84,7 +84,7 @@ fn register_com_class() -> Result<()> {
 
 fn register_profile() -> Result<()> {
     let icon = install_dir()
-        .map(|d| d.join("lightbopomofo.ico").to_string_lossy().into_owned())
+        .map(|d| d.join("lightbopomofo-input.ico").to_string_lossy().into_owned())
         .unwrap_or_default();
     unsafe {
         let profiles: ITfInputProcessorProfileMgr =
