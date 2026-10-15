@@ -1,13 +1,16 @@
 // Draws the disk-image window background: a bright gradient, colourful
-// bopomofo and confetti all around, a bold arrow from the app (left) to
-// Applications (right), and soft pads behind both icons and their names.
+// bopomofo and confetti, a bold arrow from the app (left) to Applications
+// (right), and a soft glow behind both icons.
 // Usage: swift scripts/make-dmg-background.swift macos/dmg/background.tiff
 //
-// Layout must match macos/dmg/settings.py (window 660×420, 128 pt icons
-// centred at (170, 200) and (490, 200), measured from the top left).
+// Finder draws the picture once from the top left and leaves the rest of a
+// larger window blank, so the canvas is much bigger than the 660×420 window
+// and the pattern covers all of it. Layout must match
+// macos/dmg/generate_dsstore.py (128 pt icons centred at (170, 200) and
+// (490, 200), measured from the top left).
 import AppKit
 
-let width: CGFloat = 660, height: CGFloat = 420
+let width: CGFloat = 1800, height: CGFloat = 1200
 let icons = [CGPoint(x: 170, y: 200), CGPoint(x: 490, y: 200)]
 
 /// Window coordinates (origin top left) → drawing coordinates (bottom left).
@@ -24,9 +27,8 @@ let palette: [NSColor] = [
 let symbols = Array("ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ")
 
 /// Areas the scattered symbols stay out of (window coordinates).
-let keepClear: [CGRect] = icons.map { CGRect(x: $0.x - 92, y: $0.y - 86, width: 184, height: 200) } + [
+let keepClear: [CGRect] = icons.map { CGRect(x: $0.x - 92, y: $0.y - 86, width: 184, height: 196) } + [
     CGRect(x: 240, y: 138, width: 180, height: 116),  // arrow
-    CGRect(x: 120, y: 350, width: 420, height: 50),  // hint
 ]
 
 /// Deterministic pseudo-random numbers, so the image is the same every run.
@@ -42,26 +44,18 @@ struct Random {
 
 func drawBackground() {
     let bounds = NSRect(x: 0, y: 0, width: width, height: height)
-    NSGradient(colors: [rgb(0xFFF0B3), rgb(0xFFD6C4), rgb(0xFBC9E6), rgb(0xD9CFFF)])!
-        .draw(in: bounds, angle: -28)
+    // Colours cycle along the diagonal, so any part of the canvas a window
+    // shows has a few of them.
+    let stops = [0xFFF0B3, 0xFFD6C4, 0xFBC9E6, 0xD9CFFF, 0xC9F0E4, 0xCDE5FF, 0xFFF0B3, 0xFFD6C4, 0xFBC9E6]
+    NSGradient(colors: stops.map { rgb(UInt32($0)) })!.draw(in: bounds, angle: -32)
 
     var rng = Random()
 
-    // Confetti dots first, so symbols sit on top of them.
-    for _ in 0..<70 {
-        let r = rng.range(2.5, 6)
-        let c = CGPoint(x: rng.range(8, width - 8), y: rng.range(8, height - 8))
-        let box = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
-        if keepClear.contains(where: { $0.intersects(box) }) { continue }
-        rng.pick(palette).withAlphaComponent(rng.range(0.45, 0.8)).setFill()
-        let at = p(c.x, c.y)
-        NSBezierPath(ovalIn: NSRect(x: at.x - r, y: at.y - r, width: r * 2, height: r * 2)).fill()
-    }
-
-    // Colourful bopomofo all around.
+    // Colourful bopomofo all over (about 60 per window-sized area).
     var placed: [(CGPoint, CGFloat)] = []
     var attempts = 0
-    while placed.count < 60 && attempts < 6000 {
+    let target = Int(60 * (width * height) / (660 * 420))
+    while placed.count < target && attempts < target * 100 {
         attempts += 1
         let size = rng.range(20, 48)
         let center = CGPoint(x: rng.range(16, width - 16), y: rng.range(16, height - 16))
@@ -86,15 +80,29 @@ func drawBackground() {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    // Soft white glow behind each icon and a pad behind its name, so the
-    // icons pop and Finder's labels stay readable on the colours.
+    // Confetti dots in the gaps: clear of every symbol and of each other.
+    var dots: [(CGPoint, CGFloat)] = []
+    attempts = 0
+    let dotTarget = Int(70 * (width * height) / (660 * 420))
+    while dots.count < dotTarget && attempts < dotTarget * 100 {
+        attempts += 1
+        let r = rng.range(2.5, 6)
+        let c = CGPoint(x: rng.range(8, width - 8), y: rng.range(8, height - 8))
+        let box = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+        if keepClear.contains(where: { $0.intersects(box) }) { continue }
+        if placed.contains(where: { hypot($0.0.x - c.x, $0.0.y - c.y) < $0.1 * 0.62 + r + 4 }) { continue }
+        if dots.contains(where: { hypot($0.0.x - c.x, $0.0.y - c.y) < $0.1 + r + 8 }) { continue }
+        dots.append((c, r))
+        rng.pick(palette).withAlphaComponent(rng.range(0.45, 0.8)).setFill()
+        let at = p(c.x, c.y)
+        NSBezierPath(ovalIn: NSRect(x: at.x - r, y: at.y - r, width: r * 2, height: r * 2)).fill()
+    }
+
+    // Soft white glow behind each icon so it stands out from the colours.
     for c in icons {
         let glow = NSGradient(colors: [NSColor.white.withAlphaComponent(0.85), NSColor.white.withAlphaComponent(0)])!
         let at = p(c.x, c.y)
         glow.draw(fromCenter: at, radius: 0, toCenter: at, radius: 100, options: [])
-        let pad = NSRect(x: at.x - 78, y: at.y - 98, width: 156, height: 28)
-        NSColor.white.withAlphaComponent(0.8).setFill()
-        NSBezierPath(roundedRect: pad, xRadius: 14, yRadius: 14).fill()
     }
 
     // The arrow: a bold, playful curve with a white outline.
@@ -124,13 +132,6 @@ func drawBackground() {
     coral.setFill()
     head.fill()
 
-    // Hint.
-    let hint = NSAttributedString(string: "把「輕注音」拖到「應用程式」就完成安裝！", attributes: [
-        .font: NSFont.systemFont(ofSize: 15, weight: .bold),
-        .foregroundColor: rgb(0x4B2E83),
-    ])
-    let hs = hint.size()
-    hint.draw(at: p((width - hs.width) / 2, 374 + hs.height / 2))
 }
 
 func rep(scale: CGFloat) -> NSBitmapImageRep {
