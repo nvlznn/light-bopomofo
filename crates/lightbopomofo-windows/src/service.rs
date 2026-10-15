@@ -209,7 +209,8 @@ impl TextService_Impl {
         unsafe {
             if let Ok(compartments) = thread_mgr.cast::<ITfCompartmentMgr>() {
                 if let Ok(c) = compartments.GetCompartment(&GUID_COMPARTMENT_KEYBOARD_OPENCLOSE) {
-                    let _ = c.SetValue(self.client.get(), &variant_u32(1));
+                    let opened = c.SetValue(self.client.get(), &variant_u32(1));
+                    log::debug(|| format!("keyboard open: {opened:?}"));
                 }
                 if let Ok(c) =
                     compartments.GetCompartment(&GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION)
@@ -397,11 +398,8 @@ impl ITfThreadMgrEventSink_Impl for TextService_Impl {
         Ok(())
     }
 
-    fn OnSetFocus(
-        &self,
-        _focus: Ref<ITfDocumentMgr>,
-        _previous: Ref<ITfDocumentMgr>,
-    ) -> Result<()> {
+    fn OnSetFocus(&self, focus: Ref<ITfDocumentMgr>, _previous: Ref<ITfDocumentMgr>) -> Result<()> {
+        log::debug(|| format!("document focus: {}", focus.is_some()));
         guard("ThreadMgr::OnSetFocus", Ok(()), || {
             // The old document ends its composition (OnCompositionTerminated).
             candidates::hide();

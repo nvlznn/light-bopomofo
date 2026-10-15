@@ -33,9 +33,11 @@ mod imp {
         VK_SPACE,
     };
     use windows::Win32::UI::TextServices::{
-        CLSID_TF_InputProcessorProfiles, CLSID_TF_ThreadMgr, ITfInputProcessorProfileMgr,
-        ITfKeystrokeMgr, ITfThreadMgr, GUID_TFCAT_TIP_KEYBOARD, TF_INPUTPROCESSORPROFILE,
-        TF_IPPMF_FORPROCESS, TF_IPPMF_FORSESSION, TF_PROFILETYPE_INPUTPROCESSOR,
+        CLSID_TF_InputProcessorProfiles, CLSID_TF_ThreadMgr, ITfCompartmentMgr,
+        ITfInputProcessorProfileMgr, ITfKeystrokeMgr, ITfThreadMgr, GUID_COMPARTMENT_EMPTYCONTEXT,
+        GUID_COMPARTMENT_KEYBOARD_DISABLED, GUID_COMPARTMENT_KEYBOARD_OPENCLOSE,
+        GUID_TFCAT_TIP_KEYBOARD, TF_INPUTPROCESSORPROFILE, TF_IPPMF_FORPROCESS,
+        TF_IPPMF_FORSESSION, TF_PROFILETYPE_INPUTPROCESSOR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, DispatchMessageW, GetWindowTextW, PeekMessageW,
@@ -80,6 +82,11 @@ mod imp {
             const { std::cell::RefCell::new(None) };
     }
 
+    thread_local! {
+        /// Keys traced so far (the first few are enough).
+        static TRACED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    }
+
     /// Whether TSF took the key (so it must not reach the control).
     fn tsf_takes(msg: &MSG) -> bool {
         KEYSTROKES.with(|k| {
@@ -89,8 +96,14 @@ mod imp {
             unsafe {
                 match msg.message {
                     WM_KEYDOWN => {
-                        keys.TestKeyDown(msg.wParam, msg.lParam)
-                            .is_ok_and(|e| e.as_bool())
+                        let test = keys.TestKeyDown(msg.wParam, msg.lParam);
+                        TRACED.with(|n| {
+                            if n.get() < 6 {
+                                n.set(n.get() + 1);
+                                mark(&format!("TestKeyDown {:#04x} -> {test:?}", msg.wParam.0));
+                            }
+                        });
+                        test.is_ok_and(|e| e.as_bool())
                             && keys
                                 .KeyDown(msg.wParam, msg.lParam)
                                 .is_ok_and(|e| e.as_bool())
@@ -365,6 +378,25 @@ mod imp {
                     Err(e) => format!("none ({e})"),
                 };
                 println!("NOTE [{label}] keys go to: {foreground}");
+            }
+            if let Some(thread_mgr) = tsf {
+                let value = |c: windows_core::Result<ITfCompartmentMgr>, id: &GUID| {
+                    c.and_then(|c| c.GetCompartment(id))
+                        .and_then(|c| c.GetValue())
+                        .map(|v| format!("{:?}", i32::try_from(&v).ok()))
+                        .unwrap_or_else(|e| format!("({e})"))
+                };
+                let open = value(thread_mgr.cast(), &GUID_COMPARTMENT_KEYBOARD_OPENCLOSE);
+                let context = thread_mgr.GetFocus().and_then(|d| d.GetTop());
+                let disabled = value(
+                    context.clone().and_then(|c| c.cast()),
+                    &GUID_COMPARTMENT_KEYBOARD_DISABLED,
+                );
+                let empty = value(
+                    context.and_then(|c| c.cast()),
+                    &GUID_COMPARTMENT_EMPTYCONTEXT,
+                );
+                println!("NOTE [{label}] keyboard open: {open}, document keyboard disabled: {disabled}, empty: {empty}");
             }
         }
     }

@@ -163,14 +163,14 @@ Write-Host "== logs"
 $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"
 if (Test-Path $log) {
     Write-Host "---- ime.log (non-debug)"; Get-Content $log | Where-Object { $_ -notmatch " DEBUG " } | Select-Object -Last 40
-    Write-Host "---- ime.log debug lines by process (from the last control's start, 25 each)"
+    Write-Host "---- ime.log debug lines by process (from just before the last control's start, 40 each)"
     Get-Content $log | Where-Object { $_ -match " (DEBUG|MARK) " } | Group-Object { ($_ -split " ")[2] } |
         ForEach-Object {
             $lines = @($_.Group)
-            $last = ($lines | Select-String " MARK " | Select-Object -Last 1)
-            $from = if ($last) { $last.LineNumber - 1 } else { [Math]::Max(0, $lines.Count - 25) }
+            $last = ($lines | Select-String " MARK .* start " | Select-Object -Last 1)
+            $from = if ($last) { [Math]::Max(0, $last.LineNumber - 7) } else { [Math]::Max(0, $lines.Count - 40) }
             Write-Host "-- $($_.Name)"
-            $lines[$from..([Math]::Min($lines.Count - 1, $from + 24))] | ForEach-Object { Write-Host $_ }
+            $lines[$from..([Math]::Min($lines.Count - 1, $from + 39))] | ForEach-Object { Write-Host $_ }
         }
 } else { Write-Host "no ime.log" }
 if ($script:failures.Count -gt 0) {
