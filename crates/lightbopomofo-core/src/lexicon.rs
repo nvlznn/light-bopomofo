@@ -147,7 +147,8 @@ pub struct Lexicon {
 #[derive(Clone, Copy)]
 pub struct EntryRef<'a> {
     lex: &'a Lexicon,
-    text: &'a str,
+    /// Where the text is; decoded only when asked for (scoring never needs it).
+    text: (usize, usize),
     syl_start: usize,
     n_syl: usize,
     freq: u32,
@@ -155,7 +156,11 @@ pub struct EntryRef<'a> {
 
 impl<'a> EntryRef<'a> {
     pub fn text(&self) -> &'a str {
-        self.text
+        let (start, end) = self.text;
+        let bytes = &self.lex.bytes[start..end];
+        // SAFETY: every entry's text was checked to be UTF-8 when the image
+        // was opened (`validate`), and the image is never modified after.
+        unsafe { std::str::from_utf8_unchecked(bytes) }
     }
 
     pub fn freq(&self) -> u32 {
@@ -169,6 +174,35 @@ impl<'a> EntryRef<'a> {
     pub fn syllables(&self) -> impl ExactSizeIterator<Item = Syllable> + 'a {
         let lex = self.lex;
         (self.syl_start..self.syl_start + self.n_syl).map(move |i| lex.syllable(i))
+    }
+
+    /// The `k`-th syllable as stored, for matching without decoding.
+    /// `k` must be below [`syllable_count`](Self::syllable_count).
+    pub fn raw_syllable(&self, k: usize) -> RawSyllable {
+        let o = self.lex.s.syllables + (self.syl_start + k) * SYLLABLE;
+        let b = &*self.lex.bytes;
+        RawSyllable {
+            base: [u16_at(b, o), u16_at(b, o + 2), u16_at(b, o + 4)],
+            tone: u16_at(b, o + 6),
+        }
+    }
+}
+
+/// A syllable as stored: symbol code points (0 past the end) and the tone
+/// mark's code point (0 for first tone). Every symbol is in the BMP.
+#[derive(Clone, Copy, Debug)]
+pub struct RawSyllable {
+    pub base: [u16; MAX_SYLLABLE_LEN],
+    pub tone: u16,
+}
+
+impl RawSyllable {
+    pub fn len(&self) -> usize {
+        self.base.iter().take_while(|&&c| c != 0).count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.base[0] == 0
     }
 }
 
@@ -361,13 +395,11 @@ impl Lexicon {
     pub fn entry(&self, id: u32) -> EntryRef<'_> {
         let (b, s) = (&*self.bytes, self.s);
         let o = s.entries + id as usize * ENTRY;
-        let text_off = u32_at(b, o) as usize;
+        let text_off = s.text + u32_at(b, o) as usize;
         let text_len = u16_at(b, o + 12) as usize;
-        let text = &b[s.text + text_off..s.text + text_off + text_len];
         EntryRef {
             lex: self,
-            // Validated when the image was opened.
-            text: std::str::from_utf8(text).unwrap_or(""),
+            text: (text_off, text_off + text_len),
             syl_start: u32_at(b, o + 4) as usize,
             n_syl: u16_at(b, o + 14) as usize,
             freq: u32_at(b, o + 8),
@@ -402,7 +434,12 @@ impl Lexicon {
 
     /// Natural log of the entry's unigram probability.
     pub fn log_prob(&self, id: u32) -> f64 {
-        ((self.entry(id).freq() as f64 + 1.0) / self.total_freq).ln()
+        self.log_prob_of(self.entry(id).freq())
+    }
+
+    /// Natural log of the unigram probability of a word with frequency `freq`.
+    pub fn log_prob_of(&self, freq: u32) -> f64 {
+        ((freq as f64 + 1.0) / self.total_freq).ln()
     }
 }
 

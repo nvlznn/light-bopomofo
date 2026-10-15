@@ -320,11 +320,16 @@ impl Engine {
             };
             for id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
-                    let text = self.lexicon.entry(id).text();
-                    let used = learned
-                        .iter()
-                        .find(|l| l.text == text)
-                        .map_or(0, |l| l.count);
+                    // Only look at the text when this span has learned choices.
+                    let used = if learned.is_empty() {
+                        0
+                    } else {
+                        let text = self.lexicon.entry(id).text();
+                        learned
+                            .iter()
+                            .find(|l| l.text == text)
+                            .map_or(0, |l| l.count)
+                    };
                     let edge = Edge {
                         start,
                         end: pos,
@@ -348,36 +353,44 @@ impl Engine {
 
     /// Score of word `id` typed as `slots`, or `None` if it doesn't fit.
     fn score_entry(&self, input: &[char], slots: &[(usize, usize)], id: u32) -> Option<f64> {
+        // Hot path: most entries fail on the first symbol, so compare the
+        // stored code points directly and compute the log only on a match.
         let entry = self.lexicon.entry(id);
-        let mut score = self.lexicon.log_prob(id) + WORD_PENALTY;
-        for (&(a, b), syl) in slots.iter().zip(entry.syllables()) {
+        let mut score = 0.0;
+        for (k, &(a, b)) in slots.iter().enumerate() {
+            let syl = entry.raw_syllable(k);
             let mut typed = &input[a..b];
             let mut toned = false;
             if let Some((&last, rest)) = typed.split_last() {
                 if is_tone(last) {
                     toned = true;
-                    if syl.tone() != Some(last) {
+                    if syl.tone as u32 != last as u32 {
                         return None;
                     }
                     typed = rest;
                 }
             }
-            let base = syl.base();
-            if typed.len() > base.len() || base[..typed.len()] != *typed {
+            let base_len = syl.len();
+            if typed.len() > base_len
+                || typed
+                    .iter()
+                    .zip(&syl.base)
+                    .any(|(&c, &s)| c as u32 != s as u32)
+            {
                 return None;
             }
-            score += if typed.len() == base.len() {
+            score += if typed.len() == base_len {
                 SLOT_FULL
             } else if typed.len() == 1 {
                 SLOT_INITIAL
             } else {
                 SLOT_PARTIAL
             };
-            if toned && typed.len() < base.len() {
+            if toned && typed.len() < base_len {
                 score += SLOT_TONED_INCOMPLETE;
             }
         }
-        Some(score)
+        Some(score + self.lexicon.log_prob_of(entry.freq()) + WORD_PENALTY)
     }
 
     fn viterbi(&self, input: &[char], best: &[Vec<Option<Edge>>]) -> Candidate {
