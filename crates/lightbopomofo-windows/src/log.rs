@@ -33,6 +33,15 @@ fn write(level: &str, message: &str) {
     }
 }
 
+/// Key-level tracing, only when the LIGHTBOPOMOFO_DEBUG environment
+/// variable is set (tests); never on users' machines by default.
+pub fn debug(message: impl FnOnce() -> String) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ENABLED.get_or_init(|| std::env::var_os("LIGHTBOPOMOFO_DEBUG").is_some()) {
+        write("DEBUG", &message());
+    }
+}
+
 pub fn info(message: &str) {
     write("INFO", message);
 }

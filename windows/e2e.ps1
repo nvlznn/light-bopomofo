@@ -41,6 +41,9 @@ function Run-Typing($triple, $label) {
     Check "typing in a $label process" ($code -eq 0) "($code scenario(s) failed)"
 }
 
+# Key-level tracing in the input method's log (only when this is set).
+$env:LIGHTBOPOMOFO_DEBUG = "1"
+
 Write-Host "== build the test program (64- and 32-bit)"
 foreach ($t in "x86_64-pc-windows-msvc", "i686-pc-windows-msvc") {
     cargo build --release -p lightbopomofo-windows --example e2e --target $t
@@ -66,45 +69,52 @@ Run-Typing "x86_64-pc-windows-msvc" "64-bit"
 Run-Typing "i686-pc-windows-msvc" "32-bit"
 Check "history written" ((Test-Path $history) -and (Get-Item $history).Length -gt 0)
 
-Write-Host "== a real TSF-aware application (WordPad)"
-$wordpad = "$env:ProgramFiles\Windows NT\Accessories\wordpad.exe"
-if (Test-Path $wordpad) {
+Write-Host "== a real TSF-aware application (Microsoft Edge)"
+$edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") |
+    Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($edge) {
     & "target\x86_64-pc-windows-msvc\release\examples\e2e.exe" --activate-session | ForEach-Object { Write-Host "  $_" }
-    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Windows.Forms, UIAutomationClient, UIAutomationTypes
     Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-using System.Text;
-public static class Win {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wparam, StringBuilder lparam);
+public static class Fg {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
-    public static string Text(IntPtr hwnd) {
-        var sb = new StringBuilder(4096);
-        SendMessage(hwnd, 0x000D, (IntPtr)sb.Capacity, sb);
-        return sb.ToString();
-    }
 }
 "@
-    foreach ($case in @(@("sca ", "你好嗎"), @("eyzz ", "工作方法"))) {
-        $app = Start-Process $wordpad -PassThru
-        Start-Sleep -Seconds 4
-        $app.Refresh()
-        [Win]::SetForegroundWindow($app.MainWindowHandle) | Out-Null
-        Start-Sleep -Milliseconds 500
-        foreach ($k in $case[0].ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$k"); Start-Sleep -Milliseconds 150 }
+    $page = "$env:TEMP\lb-textarea.html"
+    Set-Content -Encoding UTF8 $page '<!doctype html><meta charset="utf-8"><title>lb</title><textarea id="t" autofocus style="width:600px;height:200px"></textarea>'
+    $cases = @(
+        @{ name = "ㄋㄏㄇ → 你好嗎"; keys = @("s", "c", "a", " "); want = "你好嗎" },
+        @{ name = "ㄍㄗㄈㄈ → 工作方法"; keys = @("e", "y", "z", "z", " "); want = "工作方法" },
+        @{ name = "choose 工作 then 方法"; keys = @("e", "y", "z", "z", "{RIGHT}", "{RIGHT}", "{RIGHT}", "{RIGHT}", " ", " "); want = "工作方法" }
+    )
+    foreach ($case in $cases) {
+        $dataDir = "$env:TEMP\lb-edge-$([guid]::NewGuid())"
+        $null = Start-Process $edge -ArgumentList "--new-window", "--no-first-run", "--no-default-browser-check", "--disable-features=msEdgeSidebar", "--user-data-dir=`"$dataDir`"", "file:///$($page -replace '\\','/')" -PassThru
+        Start-Sleep -Seconds 8
+        $win = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "lb*" } | Select-Object -First 1
+        if (-not $win) { Check "Edge: $($case.name)" $false "(Edge window not found)"; continue }
+        [Fg]::SetForegroundWindow($win.MainWindowHandle) | Out-Null
         Start-Sleep -Milliseconds 800
-        $edit = [Win]::FindWindowEx($app.MainWindowHandle, [IntPtr]::Zero, "RICHEDIT50W", $null)
-        $got = if ($edit -ne [IntPtr]::Zero) { [Win]::Text($edit).Trim() } else { "<no RichEdit>" }
-        Check "WordPad: $($case[0].Trim()) → $($case[1])" ($got -eq $case[1]) "(got '$got')"
-        Stop-Process -Id $app.Id -Force
+        foreach ($k in $case.keys) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds 200 }
         Start-Sleep -Seconds 1
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($win.MainWindowHandle)
+        $isEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+        $values = @()
+        foreach ($e in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isEdit)) {
+            try { $values += $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch {}
+        }
+        $got = $values | Where-Object { $_ -notlike "file:*" -and $_ -notlike "*lb-textarea*" }
+        Check "Edge: $($case.name)" ($got -contains $case.want) "(edit values: '$($values -join "' | '")')"
+        Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
     }
+    $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"
+    Check "Edge loaded 輕注音" ((Test-Path $log) -and (Select-String -Path $log -Pattern "msedge.exe\] activated" -Quiet))
 } else {
-    Write-Host "NOTE WordPad is not installed on this machine"
+    Write-Host "NOTE Microsoft Edge is not installed on this machine"
 }
 
 Write-Host "== update while in use"
@@ -141,7 +151,12 @@ if ($left) {
 
 Write-Host "== logs"
 $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"
-if (Test-Path $log) { Write-Host "---- ime.log"; Get-Content $log -Tail 60 } else { Write-Host "no ime.log" }
+if (Test-Path $log) {
+    Write-Host "---- ime.log (non-debug)"; Get-Content $log | Where-Object { $_ -notmatch " DEBUG " } | Select-Object -Last 40
+    Write-Host "---- ime.log debug lines by process (first 12 each)"
+    Get-Content $log | Where-Object { $_ -match " DEBUG " } | Group-Object { ($_ -split " ")[2] } |
+        ForEach-Object { Write-Host "-- $($_.Name)"; $_.Group | Select-Object -First 12 | ForEach-Object { Write-Host $_ } }
+} else { Write-Host "no ime.log" }
 if ($script:failures.Count -gt 0) {
     foreach ($l in "install", "update", "uninstall") {
         $f = "$env:TEMP\setup-$l.log"

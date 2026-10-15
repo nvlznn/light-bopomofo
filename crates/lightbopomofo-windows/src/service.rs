@@ -149,6 +149,14 @@ impl TextService_Impl {
         };
         let result = self.composer.borrow_mut().handle(&mut engine, key);
         drop(engine);
+        log::debug(|| {
+            format!(
+                "key handled={} commit={} chars, composing={} symbols",
+                result.handled,
+                result.commit.chars().count(),
+                self.composer.borrow().composing_text().chars().count()
+            )
+        });
         if let Err(e) = self.render(context, result.commit) {
             // The application refused the edit: give up this composition and
             // let it have the key, rather than swallowing keys silently.
@@ -331,7 +339,16 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
         guard("OnTestKeyDown", Ok(BOOL(0)), || {
             let vk_code = wparam.0 as u16;
             self.shift.borrow_mut().key_down(vk_code);
-            Ok(self.wants(vk_code).is_some().into())
+            let wanted = self.wants(vk_code).is_some();
+            log::debug(|| {
+                format!(
+                    "test key {vk_code:#04x}: wanted={wanted} chinese={} caps={} composing={}",
+                    self.chinese.get(),
+                    caps_lock_on(),
+                    !self.composer.borrow().is_empty()
+                )
+            });
+            Ok(wanted.into())
         })
     }
 
