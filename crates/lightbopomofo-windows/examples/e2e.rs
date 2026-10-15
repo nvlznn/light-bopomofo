@@ -27,14 +27,15 @@ mod imp {
     };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, LoadLibraryW};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetKeyState, SendInput, SetFocus, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-        KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL,
-        VK_ESCAPE, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE,
+        GetKeyState, GetKeyboardLayout, SendInput, SetFocus, HKL, INPUT, INPUT_0, INPUT_KEYBOARD,
+        KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_BACK, VK_CAPITAL,
+        VK_CONTROL, VK_ESCAPE, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RETURN, VK_RIGHT, VK_SHIFT,
+        VK_SPACE,
     };
     use windows::Win32::UI::TextServices::{
         CLSID_TF_InputProcessorProfiles, CLSID_TF_ThreadMgr, ITfInputProcessorProfileMgr,
-        ITfKeystrokeMgr, ITfThreadMgr, TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE, TF_IPPMF_FORPROCESS,
-        TF_IPPMF_FORSESSION, TF_PROFILETYPE_INPUTPROCESSOR,
+        ITfKeystrokeMgr, ITfThreadMgr, GUID_TFCAT_TIP_KEYBOARD, TF_INPUTPROCESSORPROFILE,
+        TF_IPPMF_FORPROCESS, TF_IPPMF_FORSESSION, TF_PROFILETYPE_INPUTPROCESSOR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, DispatchMessageW, GetWindowTextW, PeekMessageW,
@@ -326,8 +327,46 @@ mod imp {
         ]
     }
 
+    /// Like choosing 輕注音 with Win+Space: the input language becomes
+    /// Chinese (Taiwan) too. Applications only send keys to the input
+    /// method of the current input language.
     fn activate() -> windows_core::Result<()> {
-        activate_with(TF_IPPMF_FORPROCESS | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE)
+        activate_with(TF_IPPMF_FORPROCESS)
+    }
+
+    /// Which input method Windows considers active, and (for a thread
+    /// running TSF) which one receives keys.
+    fn report_input_method(label: &str, tsf: Option<&ITfThreadMgr>) {
+        unsafe {
+            let hkl = GetKeyboardLayout(0);
+            let active = CoCreateInstance::<_, ITfInputProcessorProfileMgr>(
+                &CLSID_TF_InputProcessorProfiles,
+                None,
+                CLSCTX_INPROC_SERVER,
+            )
+            .and_then(|profiles| {
+                let mut profile = TF_INPUTPROCESSORPROFILE::default();
+                profiles.GetActiveProfile(&GUID_TFCAT_TIP_KEYBOARD, &mut profile)?;
+                Ok(profile)
+            });
+            let active = match active {
+                Ok(p) if p.clsid == CLSID_TEXT_SERVICE => "輕注音".to_string(),
+                Ok(p) => format!("{:?} langid {:04x}", p.clsid, p.langid),
+                Err(e) => format!("unknown ({e})"),
+            };
+            println!(
+                "NOTE [{label}] active keyboard input method: {active}, layout {:08x}",
+                hkl.0 as usize
+            );
+            if let Some(keystrokes) = tsf.and_then(|t| t.cast::<ITfKeystrokeMgr>().ok()) {
+                let foreground = match keystrokes.GetForeground() {
+                    Ok(g) if g == CLSID_TEXT_SERVICE => "輕注音".to_string(),
+                    Ok(g) => format!("{g:?}"),
+                    Err(e) => format!("none ({e})"),
+                };
+                println!("NOTE [{label}] keys go to: {foreground}");
+            }
+        }
     }
 
     fn activate_with(flags: u32) -> windows_core::Result<()> {
@@ -470,8 +509,7 @@ mod imp {
             unsafe {
                 let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             }
-            return match activate_with(TF_IPPMF_FORSESSION | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE)
-            {
+            return match activate_with(TF_IPPMF_FORSESSION) {
                 Ok(()) => {
                     println!("PASS activate 輕注音 for the session");
                     0
@@ -554,6 +592,7 @@ mod imp {
                     return failed;
                 }
             }
+            report_input_method(label, _keep_tsf_alive.as_ref());
             failed += run_scenarios(label, edit, inline);
             unsafe {
                 let _ = DestroyWindow(edit);

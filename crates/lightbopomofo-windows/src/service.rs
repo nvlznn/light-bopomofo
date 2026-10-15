@@ -315,7 +315,8 @@ impl ITfTextInputProcessor_Impl for TextService_Impl {
 }
 
 impl ITfTextInputProcessorEx_Impl for TextService_Impl {
-    fn ActivateEx(&self, ptim: Ref<ITfThreadMgr>, tid: u32, _flags: u32) -> Result<()> {
+    fn ActivateEx(&self, ptim: Ref<ITfThreadMgr>, tid: u32, flags: u32) -> Result<()> {
+        log::debug(|| format!("ActivateEx flags {flags:#x}"));
         guard("ActivateEx", Err(E_FAIL.into()), || {
             let thread_mgr = ptim.ok()?;
             self.activate(thread_mgr, tid).inspect_err(|e| {
@@ -326,7 +327,8 @@ impl ITfTextInputProcessorEx_Impl for TextService_Impl {
 }
 
 impl ITfKeyEventSink_Impl for TextService_Impl {
-    fn OnSetFocus(&self, _foreground: BOOL) -> Result<()> {
+    fn OnSetFocus(&self, foreground: BOOL) -> Result<()> {
+        log::debug(|| format!("key foreground: {}", foreground.as_bool()));
         Ok(())
     }
 
