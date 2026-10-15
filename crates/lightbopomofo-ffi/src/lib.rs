@@ -247,8 +247,11 @@ mod tests {
 
     const MINI: &str = "你好嗎,75,ㄋㄧˇ ㄏㄠˇ ㄇㄚ\n你,89941,ㄋㄧˇ\n";
 
+    /// A lexicon file of its own for each test (tests run in parallel).
     fn lexicon_file() -> CString {
-        let path = std::env::temp_dir().join(format!("lb-ffi-{}.csv", std::process::id()));
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("lb-ffi-{}-{n}.csv", std::process::id()));
         std::fs::write(&path, MINI).unwrap();
         CString::new(path.to_str().unwrap()).unwrap()
     }

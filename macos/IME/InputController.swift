@@ -7,8 +7,8 @@ let log = Logger(subsystem: "dev.noky.inputmethod.lightbopomofo", category: "ime
 /// One engine per process, loaded at startup.
 enum SharedEngine {
     static let engine: Engine? = {
-        guard let lexicon = Bundle.main.path(forResource: "tsi", ofType: "csv") else {
-            log.error("lexicon tsi.csv missing from bundle")
+        guard let lexicon = Bundle.main.path(forResource: "lexicon", ofType: "bin") else {
+            log.error("lexicon.bin missing from bundle")
             return nil
         }
         let engine = Engine(lexiconPath: lexicon, historyPath: UserData.historyPath)

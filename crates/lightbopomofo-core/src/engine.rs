@@ -162,7 +162,7 @@ impl Engine {
             let entry = self
                 .lexicon
                 .entry(edge.entry.expect("walk only yields words"));
-            let text = entry.text.to_string();
+            let text = entry.text().to_string();
             if text == full_text {
                 continue;
             }
@@ -312,12 +312,12 @@ impl Engine {
                 self.history
                     .learned(&input[start..pos].iter().collect::<String>())
             };
-            for &id in self.lexicon.entries_at(node) {
+            for id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
-                    let text = &*self.lexicon.entry(id).text;
+                    let text = self.lexicon.entry(id).text();
                     let used = learned
                         .iter()
-                        .find(|l| &*l.text == text)
+                        .find(|l| l.text == text)
                         .map_or(0, |l| l.count);
                     let edge = Edge {
                         start,
@@ -344,7 +344,7 @@ impl Engine {
     fn score_entry(&self, input: &[char], slots: &[(usize, usize)], id: u32) -> Option<f64> {
         let entry = self.lexicon.entry(id);
         let mut score = self.lexicon.log_prob(id) + WORD_PENALTY;
-        for (&(a, b), syl) in slots.iter().zip(entry.syllables.iter()) {
+        for (&(a, b), syl) in slots.iter().zip(entry.syllables()) {
             let mut typed = &input[a..b];
             let mut toned = false;
             if let Some((&last, rest)) = typed.split_last() {
@@ -403,7 +403,7 @@ impl Engine {
         for edge in &path {
             match edge.entry {
                 Some(id) => {
-                    let t = &self.lexicon.entry(id).text;
+                    let t = self.lexicon.entry(id).text();
                     text.push_str(t);
                     words.push(Word {
                         typed: input[edge.start..edge.end].iter().collect(),

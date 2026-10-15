@@ -4,6 +4,7 @@ members = [
     "crates/lightbopomofo-core",
     "crates/lightbopomofo-ffi",
     "crates/lightbopomofo-cli",
+    "crates/build-lexicon",
 ]
 
 [workspace.package]

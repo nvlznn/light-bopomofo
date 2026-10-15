@@ -36,14 +36,20 @@ set_version() {
         -c "Set :CFBundleVersion $BUILD_NUMBER" "$1/Contents/Info.plist"
 }
 
+# The lexicon, compiled once into the image the engine memory-maps.
+cargo build --release -p build-lexicon --manifest-path "$ROOT/Cargo.toml"
+"$ROOT/target/release/build-lexicon" "$ROOT/data/tsi.csv" "$WORK/lexicon.bin"
+
 # The input method.
 mkdir -p "$IME/Contents/MacOS" "$IME/Contents/Resources"
 lipo -create "$WORK/ime-arm64" "$WORK/ime-x86_64" -output "$IME/Contents/MacOS/LightBopomofo"
 cp "$ROOT/macos/IME/Info.plist" "$IME/Contents/"
 set_version "$IME"
 cp -R "$ROOT/macos/IME/Resources/" "$IME/Contents/Resources/"
-cp "$ROOT/data/tsi.csv" "$IME/Contents/Resources/"
+cp "$WORK/lexicon.bin" "$IME/Contents/Resources/"
 licenses "$IME"
+# The lexicon's source, as its LGPL licence asks (lexicon.bin is compiled from it).
+cp "$ROOT/data/tsi.csv" "$IME/Contents/Resources/Licenses/"
 
 # The app around it.
 mkdir -p "$APP/Contents/MacOS"
