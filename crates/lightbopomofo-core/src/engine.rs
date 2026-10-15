@@ -266,6 +266,12 @@ impl Engine {
         self.history.reload();
     }
 
+    /// Re-read the history file only if it changed (cheap otherwise). Call
+    /// before a new composition when other processes share the file.
+    pub fn refresh_history(&mut self) -> bool {
+        self.history.reload_if_changed()
+    }
+
     /// For each position, the end positions of valid slots starting there.
     fn slot_spans(&self, input: &[char]) -> Vec<Vec<usize>> {
         (0..input.len())

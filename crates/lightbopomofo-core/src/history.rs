@@ -4,13 +4,28 @@
 //!
 //! File: one `unix_seconds<TAB>typed<TAB>text[<TAB>count]` line per entry
 //! (count defaults to 1). Choices are appended; forgetting an entry rewrites
-//! the file with one line per pair.
+//! the file with one line per pair, as does compaction once appends pile up.
+//!
+//! Several processes may share the file (on Windows every application loads
+//! the input method): each appends its own choices and re-reads the file when
+//! its modification time or size changes, see [`History::reload_if_changed`].
 
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Rewrite the file once it has this many more lines than distinct entries.
+const COMPACT_SLACK: usize = 2000;
+
+/// What a file looked like when last read: modification time and size.
+type Signature = (SystemTime, u64);
+
+fn signature(path: &Path) -> Option<Signature> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Learned {
@@ -32,6 +47,7 @@ pub struct HistoryEntry {
 pub struct History {
     path: Option<PathBuf>,
     by_typed: HashMap<String, Vec<Learned>>,
+    seen: Option<Signature>,
 }
 
 impl History {
@@ -44,20 +60,38 @@ impl History {
     pub fn load(path: impl AsRef<Path>) -> Self {
         let mut history = History {
             path: Some(path.as_ref().to_path_buf()),
-            by_typed: HashMap::new(),
+            ..Self::default()
         };
         history.reload();
         history
     }
 
+    /// Re-read the file if another process changed it since it was last
+    /// read. Cheap when nothing changed (one metadata call). Returns whether
+    /// it re-read.
+    pub fn reload_if_changed(&mut self) -> bool {
+        let Some(path) = &self.path else { return false };
+        if signature(path) == self.seen {
+            return false;
+        }
+        self.reload();
+        true
+    }
+
     /// Re-read the file (another process may have changed it).
     pub fn reload(&mut self) {
         self.by_typed.clear();
-        let Some(path) = &self.path else { return };
-        let Ok(text) = std::fs::read_to_string(path) else {
+        let Some(path) = self.path.clone() else {
             return;
         };
+        // Taken before reading: a write during the read shows up as a change.
+        self.seen = signature(&path);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let mut lines = 0;
         for line in text.lines() {
+            lines += 1;
             let mut fields = line.split('\t');
             let (Some(ts), Some(typed), Some(text)) = (fields.next(), fields.next(), fields.next())
             else {
@@ -65,6 +99,11 @@ impl History {
             };
             let count = fields.next().and_then(|c| c.parse().ok()).unwrap_or(1);
             self.bump(typed, text, count, ts.parse().unwrap_or(0));
+        }
+        let distinct: usize = self.by_typed.values().map(Vec::len).sum();
+        if lines > distinct + COMPACT_SLACK {
+            // Best effort: another process may hold the file just now.
+            let _ = self.save();
         }
     }
 
@@ -114,12 +153,21 @@ impl History {
         for &(typed, text) in &choices {
             self.bump(typed, text, 1, now);
         }
-        if let Some(path) = &self.path {
+        if let Some(path) = self.path.clone() {
             let lines: String = choices
                 .iter()
                 .map(|(typed, text)| format!("{now}\t{typed}\t{text}\n"))
                 .collect();
-            let _ = append(path, lines.as_bytes());
+            let before = signature(&path);
+            if append(&path, lines.as_bytes()).is_ok() && before == self.seen {
+                // Nobody else wrote since we last read: the file now holds
+                // exactly what we have in memory, so no need to re-read it.
+                let after = signature(&path);
+                let expected = before.map_or(0, |(_, len)| len) + lines.len() as u64;
+                if after.is_some_and(|(_, len)| len == expected) {
+                    self.seen = after;
+                }
+            }
         }
     }
 
@@ -146,8 +194,8 @@ impl History {
         self.save()
     }
 
-    fn save(&self) -> io::Result<()> {
-        let Some(path) = &self.path else {
+    fn save(&mut self) -> io::Result<()> {
+        let Some(path) = self.path.clone() else {
             return Ok(());
         };
         let body: String = self
@@ -156,7 +204,9 @@ impl History {
             .rev()
             .map(|e| format!("{}\t{}\t{}\t{}\n", e.last_used, e.typed, e.text, e.count))
             .collect();
-        write_atomically(path, body.as_bytes())
+        write_atomically(&path, body.as_bytes())?;
+        self.seen = signature(&path);
+        Ok(())
     }
 
     fn bump(&mut self, typed: &str, text: &str, count: u32, when: u64) {
@@ -201,13 +251,28 @@ fn append(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 /// Write via a temporary file and rename, so readers never see half a file.
+/// On Windows the rename fails while another program holds the file without
+/// delete sharing (a virus scanner, say), so retry briefly.
 pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
     std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, path)
+    let mut attempt = 0;
+    loop {
+        match std::fs::rename(&tmp, path) {
+            Ok(()) => return Ok(()),
+            Err(_) if attempt < 10 => {
+                attempt += 1;
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(e);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -269,6 +334,41 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 2);
         h.clear().unwrap();
         assert!(History::load(&path).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reload_if_changed_follows_other_processes() {
+        let (dir, path) = temp_path("shared");
+        let mut a = History::load(&path);
+        let mut b = History::load(&path);
+        assert!(!a.reload_if_changed());
+
+        a.record(&[("ㄋㄏㄇ", "你好嗎")]);
+        assert!(!a.reload_if_changed(), "own write needs no re-read");
+        assert!(b.reload_if_changed());
+        assert_eq!(b.count("ㄋㄏㄇ", "你好嗎"), 1);
+
+        b.record(&[("ㄋㄏㄇ", "你好嗎")]);
+        assert!(a.reload_if_changed());
+        assert_eq!(a.count("ㄋㄏㄇ", "你好嗎"), 2);
+
+        assert!(b.forget("ㄋㄏㄇ", "你好嗎").unwrap());
+        assert!(a.reload_if_changed());
+        assert_eq!(a.count("ㄋㄏㄇ", "你好嗎"), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compacts_when_appends_pile_up() {
+        let (dir, path) = temp_path("compact");
+        let mut h = History::load(&path);
+        for _ in 0..COMPACT_SLACK + 10 {
+            h.record(&[("ㄋ", "你")]);
+        }
+        let reloaded = History::load(&path); // triggers compaction
+        assert_eq!(reloaded.count("ㄋ", "你"), (COMPACT_SLACK + 10) as u32);
+        assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

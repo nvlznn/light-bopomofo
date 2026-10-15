@@ -89,8 +89,13 @@ impl Composer {
     pub fn handle(&mut self, engine: &mut Engine, key: Key) -> KeyResult {
         match key {
             Key::Symbol(s) => {
-                if self.is_empty() && is_tone(s) {
-                    return KeyResult::pass();
+                if self.is_empty() {
+                    if is_tone(s) {
+                        return KeyResult::pass();
+                    }
+                    // A new composition: pick up what other processes learned
+                    // or forgot (one metadata call when nothing changed).
+                    engine.refresh_history();
                 }
                 let flushed = if self.symbols.len() >= MAX_SYMBOLS {
                     self.commit_all(engine)
