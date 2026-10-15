@@ -1,7 +1,7 @@
 // Draws the icons.
-//   swift scripts/make-icon.swift menu macos/Resources/icon.tiff
+//   swift scripts/make-icon.swift menu macos/IME/Resources/icon.tiff
 //       input-source icon: black glyph on transparent (template), 16 + 32 px
-//   swift scripts/make-icon.swift app macos/Resources/AppIcon.icns
+//   swift scripts/make-icon.swift app macos/App/Resources/AppIcon.icns
 //       app icon: white rounded square with a black glyph
 import AppKit
 

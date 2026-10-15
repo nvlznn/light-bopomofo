@@ -30,8 +30,8 @@ STAGE="$WORK/stage"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/$LINK"
 # Drawn at build time (deterministic) rather than kept in git: the canvas is
-# large so it covers big windows, and the file is several megabytes.
-swift "$ROOT/scripts/make-dmg-background.swift" "$STAGE/.background/background.tiff"
+# large so it covers big windows.
+swift "$ROOT/scripts/make-dmg-background.swift" "$STAGE/.background/background.jpg"
 cp "$ROOT/macos/App/Resources/AppIcon.icns" "$STAGE/.VolumeIcon.icns"
 "$VENV/bin/python" -I "$ROOT/macos/dmg/generate_dsstore.py" "$STAGE/.DS_Store" \
     --volume-name "$VOLUME" --app-name "$(basename "$APP")" --link-name "$LINK"

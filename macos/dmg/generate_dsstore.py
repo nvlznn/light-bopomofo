@@ -3,8 +3,8 @@
 
 Follows the approach of Chromium's chrome/installer/mac/generate_dsstore.py:
 the background is referenced by an Alias record built for where the image
-will be mounted (/Volumes/<volume>/...), with fixed dates so the output is
-reproducible, and no bookmark. Finder ignores a background whose reference
+will be mounted (/Volumes/<volume>/.background/background.jpg), with fixed
+dates so the output is reproducible, and no bookmark. Finder ignores a background whose reference
 points anywhere else, which is what happened with a reference recorded
 while the image was mounted during the build.
 
@@ -30,7 +30,7 @@ FIXED_DATE = datetime.datetime(2000, 5, 7, 21, 10, 0, tzinfo=datetime.timezone.u
 
 
 def background_alias(volume_name: str, image: str) -> bytes:
-    """Alias to `image` (a path inside the volume, e.g. /.background/x.tiff)."""
+    """Alias to `image` (a path inside the volume, e.g. /.background/x.jpg)."""
     folder, _, filename = image.rpartition("/")
     volume = VolumeInfo(
         name=volume_name,
@@ -62,7 +62,7 @@ def main() -> None:
     parser.add_argument("--volume-name", required=True)
     parser.add_argument("--app-name", required=True, help="e.g. 輕注音.app")
     parser.add_argument("--link-name", required=True, help="name of the /Applications link")
-    parser.add_argument("--background", default="/.background/background.tiff")
+    parser.add_argument("--background", default="/.background/background.jpg")
     args = parser.parse_args()
 
     width, height = 660, 420

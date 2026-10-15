@@ -1,7 +1,7 @@
 // Draws the disk-image window background: a bright gradient, colourful
 // bopomofo and confetti, a bold arrow from the app (left) to Applications
 // (right), and a soft glow behind both icons.
-// Usage: swift scripts/make-dmg-background.swift macos/dmg/background.tiff
+// Usage: swift scripts/make-dmg-background.swift background.jpg
 //
 // Finder draws the picture once from the top left and leaves the rest of a
 // larger window blank, so the canvas is much bigger than the 660×420 window
@@ -147,9 +147,8 @@ func rep(scale: CGFloat) -> NSBitmapImageRep {
     return rep
 }
 
-let image = NSImage(size: NSSize(width: width, height: height))
-image.addRepresentation(rep(scale: 1))
-image.addRepresentation(rep(scale: 2))
+// One JPEG at twice the point size, tagged 144 dpi so Finder shows it at
+// 1800×1200 points — sharp on Retina, and a fraction of a lossless file.
 let out = URL(fileURLWithPath: CommandLine.arguments[1])
 try! FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-try! image.tiffRepresentation(using: .lzw, factor: 1)!.write(to: out)
+try! rep(scale: 2).representation(using: .jpeg, properties: [.compressionFactor: 0.85])!.write(to: out)
