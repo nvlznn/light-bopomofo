@@ -11,7 +11,7 @@
 
 **macOS 13 以上（Apple Silicon 與 Intel）**：到 [lightbopomofo.noky.dev](https://lightbopomofo.noky.dev) 或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo.dmg`，把「輕注音」拖到「應用程式」並打開，它會自動安裝並啟用輸入法。接著在選單列的輸入法選單選「輕注音」。
 
-Windows 版開發中。
+**Windows 10/11**：開發中。測試版安裝檔由 CI 產生（Actions → 最新的 CI → Artifacts → LightBopomofo-Setup），試用方式見 [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)。
 
 完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。
 
@@ -45,6 +45,22 @@ log stream --info --predicate 'subsystem == "dev.noky.inputmethod.lightbopomofo"
 ```
 
 使用者紀錄存在 `~/Library/Application Support/LightBopomofo/history.tsv`，只在本機；App 刪除紀錄後會通知輸入法重新載入。
+
+## Windows 版（開發）
+
+Windows 版全部是 Rust，實作計畫見 [docs/WINDOWS_PLAN.md](docs/WINDOWS_PLAN.md)：
+
+- `crates/lightbopomofo-windows`：輸入法 DLL（TSF text service），編成 `lightbopomofo.dll`
+- `crates/lightbopomofo-settings`：App（`LightBopomofo.exe`），狀態與選字紀錄
+- `windows/installer.iss`：Inno Setup 安裝程式；`windows/build.ps1` 建置全部並產生 `dist\LightBopomofo-Setup.exe`
+
+在 Windows 電腦上（需要 Rust 與 Visual Studio 的 C++ 建置工具，含 ARM64）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\build.ps1
+```
+
+在 Mac 上可以做型別檢查：`cargo check -p lightbopomofo-windows -p lightbopomofo-settings --target x86_64-pc-windows-msvc`。
 
 ## 發布新版（macOS）
 
