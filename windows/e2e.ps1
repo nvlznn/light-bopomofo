@@ -66,6 +66,47 @@ Run-Typing "x86_64-pc-windows-msvc" "64-bit"
 Run-Typing "i686-pc-windows-msvc" "32-bit"
 Check "history written" ((Test-Path $history) -and (Get-Item $history).Length -gt 0)
 
+Write-Host "== a real TSF-aware application (WordPad)"
+$wordpad = "$env:ProgramFiles\Windows NT\Accessories\wordpad.exe"
+if (Test-Path $wordpad) {
+    & "target\x86_64-pc-windows-msvc\release\examples\e2e.exe" --activate-session | ForEach-Object { Write-Host "  $_" }
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class Win {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wparam, StringBuilder lparam);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+    public static string Text(IntPtr hwnd) {
+        var sb = new StringBuilder(4096);
+        SendMessage(hwnd, 0x000D, (IntPtr)sb.Capacity, sb);
+        return sb.ToString();
+    }
+}
+"@
+    foreach ($case in @(@("sca ", "你好嗎"), @("eyzz ", "工作方法"))) {
+        $app = Start-Process $wordpad -PassThru
+        Start-Sleep -Seconds 4
+        $app.Refresh()
+        [Win]::SetForegroundWindow($app.MainWindowHandle) | Out-Null
+        Start-Sleep -Milliseconds 500
+        foreach ($k in $case[0].ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$k"); Start-Sleep -Milliseconds 150 }
+        Start-Sleep -Milliseconds 800
+        $edit = [Win]::FindWindowEx($app.MainWindowHandle, [IntPtr]::Zero, "RICHEDIT50W", $null)
+        $got = if ($edit -ne [IntPtr]::Zero) { [Win]::Text($edit).Trim() } else { "<no RichEdit>" }
+        Check "WordPad: $($case[0].Trim()) → $($case[1])" ($got -eq $case[1]) "(got '$got')"
+        Stop-Process -Id $app.Id -Force
+        Start-Sleep -Seconds 1
+    }
+} else {
+    Write-Host "NOTE WordPad is not installed on this machine"
+}
+
 Write-Host "== update while in use"
 $holder = Start-Process "target\x86_64-pc-windows-msvc\release\examples\e2e.exe" -ArgumentList "--hold", "180" -PassThru
 Start-Sleep -Seconds 8

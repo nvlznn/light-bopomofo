@@ -34,13 +34,12 @@ mod imp {
     use windows::Win32::UI::TextServices::{
         CLSID_TF_InputProcessorProfiles, CLSID_TF_ThreadMgr, ITfInputProcessorProfileMgr,
         ITfKeystrokeMgr, ITfThreadMgr, TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE, TF_IPPMF_FORPROCESS,
-        TF_PROFILETYPE_INPUTPROCESSOR,
+        TF_IPPMF_FORSESSION, TF_PROFILETYPE_INPUTPROCESSOR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, DispatchMessageW, GetWindowTextW, PeekMessageW,
         SendMessageW, SetForegroundWindow, ShowWindow, TranslateMessage, MSG, PM_REMOVE, SW_SHOW,
         WINDOW_EX_STYLE, WINDOW_STYLE, WM_KEYDOWN, WM_KEYUP, WM_SETTEXT, WS_OVERLAPPEDWINDOW,
-        WS_VISIBLE,
     };
     use windows_core::{w, Interface, GUID};
 
@@ -328,6 +327,10 @@ mod imp {
     }
 
     fn activate() -> windows_core::Result<()> {
+        activate_with(TF_IPPMF_FORPROCESS | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE)
+    }
+
+    fn activate_with(flags: u32) -> windows_core::Result<()> {
         unsafe {
             let profiles: ITfInputProcessorProfileMgr =
                 CoCreateInstance(&CLSID_TF_InputProcessorProfiles, None, CLSCTX_INPROC_SERVER)?;
@@ -337,7 +340,7 @@ mod imp {
                 &CLSID_TEXT_SERVICE,
                 &GUID_PROFILE,
                 HKL::default(),
-                TF_IPPMF_FORPROCESS | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE,
+                flags,
             )
         }
     }
@@ -359,14 +362,16 @@ mod imp {
         ok
     }
 
-    fn open_window(class: windows_core::PCWSTR) -> Option<HWND> {
+    /// Create the control hidden, let `prepare` configure it, then show and
+    /// focus it (a control sets up its TSF document when it gains focus).
+    fn open_window(class: windows_core::PCWSTR, prepare: impl FnOnce(HWND)) -> Option<HWND> {
         unsafe {
             let instance = GetModuleHandleW(None).unwrap_or_default();
             let edit = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 class,
                 w!(""),
-                WINDOW_STYLE(WS_OVERLAPPEDWINDOW.0 | WS_VISIBLE.0),
+                WINDOW_STYLE(WS_OVERLAPPEDWINDOW.0),
                 100,
                 100,
                 640,
@@ -377,6 +382,7 @@ mod imp {
                 None,
             )
             .ok()?;
+            prepare(edit);
             let _ = ShowWindow(edit, SW_SHOW);
             let foreground = SetForegroundWindow(edit).as_bool();
             let _ = SetFocus(Some(edit));
@@ -439,6 +445,24 @@ mod imp {
 
     pub fn run() -> i32 {
         let args: Vec<String> = std::env::args().collect();
+        if args.get(1).map(String::as_str) == Some("--activate-session") {
+            // Make 輕注音 the input method of every application in this
+            // session (for testing real applications such as WordPad).
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            }
+            return match activate_with(TF_IPPMF_FORSESSION | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE)
+            {
+                Ok(()) => {
+                    println!("PASS activate 輕注音 for the session");
+                    0
+                }
+                Err(e) => {
+                    println!("FAIL activate 輕注音 for the session: {e}");
+                    1
+                }
+            };
+        }
         let hold = (args.get(1).map(String::as_str) == Some("--hold")).then(|| {
             args.get(2)
                 .and_then(|s| s.parse::<u64>().ok())
@@ -464,14 +488,13 @@ mod imp {
         let mut failed = 0;
         let mut activated = false;
         for (label, class, inline) in controls {
-            let Some(edit) = open_window(class) else {
-                println!("FAIL [{label}] create window");
-                failed += 1;
-                continue;
-            };
-            if inline {
+            let mut tsf = None;
+            let Some(edit) = open_window(class, |edit| {
+                if !inline {
+                    return;
+                }
                 match become_tsf_aware() {
-                    Ok(t) => _keep_tsf_alive = Some(t),
+                    Ok(t) => tsf = Some(t),
                     Err(e) => println!("NOTE could not run TSF on this thread: {e}"),
                 }
                 const EM_SETEDITSTYLE: u32 = 0x0400 + 204;
@@ -484,6 +507,17 @@ mod imp {
                         Some(LPARAM(SES_USECTF as isize)),
                     );
                 }
+            }) else {
+                println!("FAIL [{label}] create window");
+                failed += 1;
+                continue;
+            };
+            if let Some(thread_mgr) = &tsf {
+                let focused = unsafe { thread_mgr.GetFocus() }.is_ok();
+                println!("NOTE [{label}] TSF document has focus: {focused}");
+            }
+            if tsf.is_some() {
+                _keep_tsf_alive = tsf;
             }
             if !activated {
                 activated = true;
