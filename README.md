@@ -13,7 +13,7 @@
 
 **Windows 10/11**：開發中。測試版安裝檔由 CI 產生（Actions → 最新的 CI → Artifacts → LightBopomofo-Setup），試用方式見 [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)。
 
-完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。
+輸入法完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。「輕注音」App 每天向 GitHub 查一次有沒有新版本，有的話會跳出通知，按一下就更新（可以在 App 關閉）。
 
 ## 開發
 

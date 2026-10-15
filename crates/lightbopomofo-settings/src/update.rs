@@ -271,7 +271,11 @@ fn get(host: &str, path: &str) -> Result<Vec<u8>, String> {
 }
 
 /// The newest release that has the Windows installer, e.g. "2.0".
+/// LIGHTBOPOMOFO_PRETEND_LATEST stands in for GitHub (screenshots, tests).
 pub fn latest() -> Result<Option<String>, String> {
+    if let Ok(version) = std::env::var("LIGHTBOPOMOFO_PRETEND_LATEST") {
+        return Ok(Some(version));
+    }
     let body = get(
         "api.github.com",
         "/repos/nvlznn/light-bopomofo/releases/latest",

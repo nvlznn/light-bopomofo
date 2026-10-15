@@ -228,5 +228,22 @@ do {
     check(!Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Volumes/輕注音/LightBopomofo.app")), "disk image copy is the installer")
 }
 
+// Which release is newer (UpdateCheck).
+do {
+    let json = Data("""
+    {"tag_name": "v2.0", "name": "輕注音 2.0",
+     "assets": [{"name": "LightBopomofo-Setup.exe"}, {"name": "LightBopomofo.dmg", "size": 8329913}]}
+    """.utf8)
+    check(UpdateCheck.latestVersion(json: json) == "2.0", "reads v2.0")
+    let windowsOnly = Data(#"{"tag_name": "v2.0", "assets": [{"name": "LightBopomofo-Setup.exe"}]}"#.utf8)
+    check(UpdateCheck.latestVersion(json: windowsOnly) == nil, "waits for the dmg")
+    check(UpdateCheck.latestVersion(json: Data("nope".utf8)) == nil, "not JSON")
+    check(UpdateCheck.isNewer("2.0", than: "1.0"), "2.0 > 1.0")
+    check(UpdateCheck.isNewer("1.0", than: "0.2.0"), "1.0 > 0.2.0")
+    check(UpdateCheck.isNewer("10.0", than: "9.0"), "10.0 > 9.0")
+    check(!UpdateCheck.isNewer("1.0", than: "1.0.0"), "1.0 = 1.0.0")
+    check(!UpdateCheck.isNewer("0.1.0", than: "1.0"), "0.1.0 < 1.0")
+}
+
 print(failures == 0 ? "OK (\(String(format: "%.2f", Date().timeIntervalSince(started)))s)" : "\(failures) failure(s)")
 exit(failures == 0 ? 0 : 1)

@@ -1,6 +1,7 @@
 import SwiftUI
+import UserNotifications
 
-@main
+/// The window (started by Main).
 struct LightBopomofoApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @StateObject private var model = AppModel()
@@ -17,6 +18,9 @@ struct LightBopomofoApp: App {
             .frame(minWidth: 620, minHeight: 460)
             .environmentObject(model)
             .task { model.setUp() }
+            .onReceive(NotificationCenter.default.publisher(for: AppModel.updateRequested)) { _ in
+                model.checkForUpdate(thenInstall: true)
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 // Pick up words typed meanwhile and changes made in System Settings.
                 model.refreshStatus()
@@ -27,6 +31,31 @@ struct LightBopomofoApp: App {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Before launching ends, to hear about the notification that launched us.
+        UNUserNotificationCenter.current().delegate = self
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// The update notification was chosen: update right away.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if response.notification.request.content.categoryIdentifier == Updater.category {
+            DispatchQueue.main.async { AppModel.requestUpdate() }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner])
+    }
 }

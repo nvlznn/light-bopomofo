@@ -19,6 +19,18 @@ function Check($name, $condition, $detail = "") {
     else { Write-Host "FAIL $name $detail"; $script:failures += $name }
 }
 
+# The whole screen, into screenshots\ (uploaded by CI).
+function Save-Screen($name) {
+    Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+    New-Item -ItemType Directory -Force "$root\screenshots" | Out-Null
+    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $image = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+    $graphics = [System.Drawing.Graphics]::FromImage($image)
+    $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+    $image.Save("$root\screenshots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+    $graphics.Dispose(); $image.Dispose()
+}
+
 function Wait-Exit($file, [string[]]$arguments) {
     (Start-Process $file -ArgumentList $arguments -Wait -PassThru).ExitCode
 }
@@ -71,8 +83,17 @@ Check "update link registered" (Test-Path "Registry::HKEY_CLASSES_ROOT\lightbopo
 # 0 up to date, 10 newer release, 1 could not ask GitHub.
 $code = Wait-Exit "$dir\LightBopomofo.exe" @("--check-update", "--now")
 Check "update check reaches GitHub" (($code -eq 0) -or ($code -eq 10)) "(exit $code)"
-$code = Wait-Exit "$dir\LightBopomofo.exe" @("--notify-test")
+$code = Wait-Exit "$dir\LightBopomofo.exe" @("--notify-test", "2.0")
 Check "update notification shown" ($code -eq 0) "(exit $code)"
+Start-Sleep -Seconds 3
+Save-Screen "windows-notification"
+# The app offering an update (as if 2.0 were out).
+$env:LIGHTBOPOMOFO_PRETEND_LATEST = "2.0"
+$shown = Start-Process "$dir\LightBopomofo.exe" -PassThru
+Start-Sleep -Seconds 6
+Save-Screen "windows-app-update"
+Stop-Process -Id $shown.Id -Force -ErrorAction SilentlyContinue
+Remove-Item Env:\LIGHTBOPOMOFO_PRETEND_LATEST
 # The scheduled task runs the check as the signed-in user.
 Remove-ItemProperty "HKCU:\Software\LightBopomofo" -Name LastUpdateCheck -ErrorAction SilentlyContinue
 $null = Wait-Exit "schtasks.exe" @("/Run", "/TN", $task)

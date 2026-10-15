@@ -33,6 +33,21 @@ jobs:
         run: macos/test.sh
       - name: Universal build and unsigned disk image
         run: macos/build.sh && macos/package-dmg.sh
+      - name: Screenshot of the update offer
+        continue-on-error: true
+        run: |
+          mkdir -p screenshots
+          LIGHTBOPOMOFO_PRETEND_LATEST=2.0 "macos/build/輕注音.app/Contents/MacOS/LightBopomofo" &
+          sleep 12
+          screencapture -x screenshots/macos-app-update.png
+          kill %1 || true
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-macos
+          path: screenshots/
+          if-no-files-found: ignore
 
   windows-package:
     runs-on: windows-latest
@@ -48,6 +63,13 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: windows/e2e.ps1
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-windows
+          path: screenshots/
+          if-no-files-found: ignore
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

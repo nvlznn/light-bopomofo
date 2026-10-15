@@ -6,6 +6,9 @@ struct GeneralView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+            if model.update != .idle {
+                UpdateBar()
+            }
             StatusCard()
 
             GroupBox("打法") {
@@ -29,9 +32,11 @@ struct GeneralView: View {
             Spacer()
 
             HStack {
-                Text("不連網，選字紀錄只存在這台 Mac。")
+                Text("輸入法不連網，選字紀錄只存在這台 Mac。")
                     .foregroundStyle(.secondary)
                 Spacer()
+                Toggle("自動檢查更新", isOn: $model.autoCheck)
+                    .help("每天向 GitHub 查一次有沒有新版本，不傳送任何資料。")
                 Link("官網", destination: URL(string: "https://lightbopomofo.noky.dev")!)
                 Link("回報問題", destination: URL(string: "https://github.com/nvlznn/light-bopomofo/issues")!)
                 Button("解除安裝…", role: .destructive) { confirmingUninstall = true }
@@ -43,6 +48,62 @@ struct GeneralView: View {
             Button("解除安裝", role: .destructive) { model.uninstall() }
         } message: {
             Text("輸入法會被停用並移到垃圾桶，選字紀錄會保留。之後可以把這個 App 從「應用程式」移到垃圾桶。")
+        }
+    }
+}
+
+private struct UpdateBar: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: failed ? "exclamationmark.triangle.fill" : "arrow.down.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(failed ? Color.orange : Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(detail)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            switch model.update {
+            case .updating:
+                ProgressView().controlSize(.small)
+            case .failed:
+                Link("到官網下載", destination: URL(string: "https://lightbopomofo.noky.dev")!)
+                Button("再試一次") { model.checkForUpdate(thenInstall: true) }
+            case .available:
+                Button("更新") { Task { await model.installUpdate() } }
+                    .keyboardShortcut(.defaultAction)
+            case .idle:
+                EmptyView()
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var failed: Bool {
+        if case .failed = model.update { return true }
+        return false
+    }
+
+    private var title: String {
+        switch model.update {
+        case .available(let v): return "有新版本：輕注音 \(v)"
+        case .updating(let v): return v.isEmpty ? "正在下載新版本…" : "正在下載輕注音 \(v)…"
+        case .failed: return "無法更新"
+        case .idle: return ""
+        }
+    }
+
+    private var detail: String {
+        switch model.update {
+        case .available: return "目前是 \(model.bundledVersion)。按「更新」下載並安裝，輸入法會一起更新。"
+        case .updating: return "完成後輕注音會自動重新開啟。"
+        case .failed(let message): return message
+        case .idle: return ""
         }
     }
 }

@@ -12,6 +12,8 @@ function Run($exe, [string[]]$arguments) {
 }
 
 $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+# Releases are named 1.0, 2.0, …; Cargo needs 1.0.0.
+$version = $version -replace '^(\d+\.\d+)\.0$', '$1'
 Write-Host "輕注音 $version"
 
 # Lexicon (data\tsi.csv from scripts/fetch-lexicon.sh).

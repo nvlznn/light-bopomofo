@@ -59,7 +59,13 @@ use crate::update;
 const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x0d5e0d6e_3056_4888_9151_8701b588ad0c);
 const GUID_PROFILE: GUID = GUID::from_u128(0x31638591_41d6_4dc9_b7d8_c2f29953f24b);
 const LANGID_ZH_TW: u16 = 0x0404;
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The version as releases are named: "1.0" for Cargo's 1.0.0.
+fn version() -> &'static str {
+    let full = env!("CARGO_PKG_VERSION");
+    full.strip_suffix(".0")
+        .filter(|v| v.matches('.').count() == 1)
+        .unwrap_or(full)
+}
 
 const ID_PRIMARY: i32 = 101;
 const ID_SEARCH: i32 = 102;
@@ -553,7 +559,10 @@ fn show_status(ui: &mut Ui) {
         ),
         (Update::Available(v), _) => (
             format!("有新版本：輕注音 {v}"),
-            format!("目前是 {VERSION}。按「更新」下載並安裝，不需要關閉其他程式或重新開機。"),
+            format!(
+                "目前是 {}。按「更新」下載並安裝，不需要關閉其他程式或重新開機。",
+                version()
+            ),
             Primary::Update,
         ),
         (Update::Failed(e), _) => (
@@ -572,7 +581,7 @@ fn show_status(ui: &mut Ui) {
             Primary::Enable,
         ),
         (Update::Idle, Status::Ready) => (
-            format!("輕注音 {VERSION} 可以使用了"),
+            format!("輕注音 {} 可以使用了", version()),
             "按 Windows 鍵 + 空白鍵 切換到「輕注音」就可以打字；按一下 Shift 切換中／英。"
                 .to_string(),
             Primary::Settings,
@@ -1006,14 +1015,13 @@ pub fn main() {
         Some("--unregister-update-task") => {
             std::process::exit(i32::from(!update::unregister_task()))
         }
-        // For tests: show the notification for this version.
+        // For tests and screenshots: show the notification (for a version).
         Some("--notify-test") => {
             unsafe {
                 let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             }
-            std::process::exit(i32::from(
-                update::notify(&update::current_version()).is_err(),
-            ))
+            let version = args.get(2).cloned().unwrap_or_else(update::current_version);
+            std::process::exit(i32::from(update::notify(&version).is_err()))
         }
         Some(url) if url.starts_with("lightbopomofo:update") => {
             UPDATE_NOW.store(true, Ordering::Relaxed)

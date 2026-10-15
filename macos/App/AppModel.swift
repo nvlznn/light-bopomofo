@@ -14,7 +14,23 @@ final class AppModel: ObservableObject {
         case failed(String)
     }
 
+    enum Update: Equatable {
+        case idle
+        case available(String)
+        /// Looking up the newest release, then downloading it ("" until known).
+        case updating(String)
+        case failed(String)
+    }
+
     @Published private(set) var status: Status = .checking
+    @Published private(set) var update: Update = .idle
+    @Published var autoCheck = Updater.autoCheck {
+        didSet {
+            Updater.autoCheck = autoCheck
+            Updater.scheduleChecks(autoCheck)
+            if autoCheck { Updater.requestPermission() }
+        }
+    }
     @Published private(set) var entries: [HistoryEntry] = []
     @Published var historyError: String?
 
@@ -32,7 +48,8 @@ final class AppModel: ObservableObject {
 
     var bundledVersion: String { installer.sourceVersion }
 
-    /// On launch: install the bundled input method if it is missing or older.
+    /// On launch: install the bundled input method if it is missing or older,
+    /// and look for updates.
     func setUp() {
         let installed = installer.installedVersion
         if installed == nil || bundledVersion.compare(installed!, options: .numeric) == .orderedDescending {
@@ -41,6 +58,59 @@ final class AppModel: ObservableObject {
             refreshStatus()
         }
         reloadHistory()
+        Updater.scheduleChecks(autoCheck)
+        if autoCheck { Updater.requestPermission() }
+        if AppModel.updatePending {
+            AppModel.updatePending = false
+            checkForUpdate(thenInstall: true)
+        } else if autoCheck {
+            checkForUpdate()
+        }
+    }
+
+    // MARK: Updates
+
+    static let updateRequested = Notification.Name("LightBopomofoUpdateRequested")
+    /// Set when the notification launched the app before the window existed.
+    private static var updatePending = false
+
+    /// The update notification was chosen.
+    static func requestUpdate() {
+        updatePending = true
+        NotificationCenter.default.post(name: updateRequested, object: nil)
+    }
+
+    func checkForUpdate(thenInstall: Bool = false) {
+        AppModel.updatePending = false
+        if case .updating = update { return }
+        if thenInstall { update = .updating("") }
+        Task {
+            do {
+                guard let version = try await UpdateCheck.available() else {
+                    update = thenInstall ? .failed("已經是最新版本") : .idle
+                    return
+                }
+                update = .available(version)
+                if thenInstall { await installUpdate() }
+            } catch {
+                // A failed check in passing is not worth a word.
+                update = thenInstall ? .failed(error.localizedDescription) : .idle
+            }
+        }
+    }
+
+    func installUpdate() async {
+        guard case .available(let version) = update else {
+            checkForUpdate(thenInstall: true)
+            return
+        }
+        update = .updating(version)
+        do {
+            try await Updater.install(version)
+            Updater.relaunch()
+        } catch {
+            update = .failed(error.localizedDescription)
+        }
     }
 
     func install() {
