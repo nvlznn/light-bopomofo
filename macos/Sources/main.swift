@@ -1,36 +1,40 @@
-import Carbon
 import Cocoa
 import InputMethodKit
 
+// One binary, three roles:
+//   LightBopomofo install | uninstall   scripted (development, CI)
+//   opened from anywhere else            installer window (the disk image)
+//   running from an Input Methods folder the input method itself
+
+switch CommandLine.arguments.dropFirst().first {
+case "install":
+    do {
+        let installer = Installer()
+        try installer.install()
+        print("installed \(installer.sourceVersion) at \(installer.destination.path)")
+        exit(0)
+    } catch {
+        print("install failed: \(error.localizedDescription)")
+        exit(1)
+    }
+case "uninstall":
+    do {
+        try Installer().uninstall()
+        print("uninstalled")
+        exit(0)
+    } catch {
+        print("uninstall failed: \(error.localizedDescription)")
+        exit(1)
+    }
+default:
+    break
+}
+
+if !Installer.isInputMethodsCopy() {
+    InstallerUI.run()
+}
+
 let bundleID = Bundle.main.bundleIdentifier ?? "dev.noky.inputmethod.lightbopomofo"
-
-/// `LightBopomofo install`: register with Text Input Sources and enable it,
-/// so it shows up without a trip to System Settings.
-func install() -> Int32 {
-    let status = TISRegisterInputSource(Bundle.main.bundleURL as CFURL)
-    guard status == noErr else {
-        print("TISRegisterInputSource failed: \(status)")
-        return 1
-    }
-    let filter = [kTISPropertyBundleID as String: bundleID] as CFDictionary
-    guard let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource],
-          !sources.isEmpty
-    else {
-        print("registered, but no input source found for \(bundleID)")
-        return 1
-    }
-    for source in sources {
-        let enabled = TISEnableInputSource(source)
-        if enabled != noErr { print("TISEnableInputSource failed: \(enabled)") }
-    }
-    print("installed and enabled \(bundleID)")
-    return 0
-}
-
-if CommandLine.arguments.dropFirst().first == "install" {
-    exit(install())
-}
-
 let connectionName =
     Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String
     ?? "dev.noky.inputmethod.lightbopomofo_Connection"

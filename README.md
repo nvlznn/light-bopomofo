@@ -22,10 +22,14 @@ cargo run --release -p lightbopomofo-cli                   # 互動模式；以 
 ## 安裝到 macOS（開發版）
 
 ```sh
-macos/build.sh      # 編出 macos/build/LightBopomofo.app
-macos/install.sh    # 安裝到 ~/Library/Input Methods 並啟用
-macos/test.sh       # 輸入邏輯的測試（不需要安裝）
+macos/build.sh        # 編出 macos/build/LightBopomofo.app（通用版、本機簽署）
+macos/install.sh      # 用 App 內建的安裝程式裝到 ~/Library/Input Methods 並啟用
+macos/test.sh         # 輸入邏輯與安裝程式的測試（不會動到系統）
+macos/package-dmg.sh  # 產生 dist/LightBopomofo.dmg
+macos/release.sh      # 簽署、公證、staple；加 --publish 建立 GitHub Release
 ```
+
+同一個 App 有三種角色：放在 `Input Methods` 資料夾裡時是輸入法；從其他地方（例如 dmg）打開時是安裝程式；加 `install`／`uninstall` 參數時直接執行安裝或解除安裝。
 
 安裝後在選單列的輸入法選單選「輕注音」（系統語言為英文時顯示 Light Bopomofo）。
 若沒有出現，登出再登入一次。除錯 log：

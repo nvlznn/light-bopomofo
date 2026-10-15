@@ -29,5 +29,5 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - name: Composer tests
         run: macos/test.sh
-      - name: Universal build and unsigned package
-        run: macos/build.sh && macos/package.sh
+      - name: Universal build and unsigned disk image
+        run: macos/build.sh && macos/package-dmg.sh

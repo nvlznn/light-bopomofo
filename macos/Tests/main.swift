@@ -129,5 +129,44 @@ do {
     check(!flushed.isEmpty && c.composingText == "ㄋ", "flush at max length")
 }
 
+// Installer: copies into a directory, strips quarantine, replaces in place.
+do {
+    let fm = FileManager.default
+    let tmp = fm.temporaryDirectory.appendingPathComponent("lb-installer-\(UUID().uuidString)")
+    defer { try? fm.removeItem(at: tmp) }
+    func makeBundle(_ version: String) -> URL {
+        let app = tmp.appendingPathComponent("src-\(version)/LightBopomofo.app")
+        let contents = app.appendingPathComponent("Contents")
+        try! fm.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "test.lightbopomofo.installer",
+            "CFBundleShortVersionString": version,
+        ]
+        (plist as NSDictionary).write(to: contents.appendingPathComponent("Info.plist"), atomically: true)
+        try! "binary".write(to: contents.appendingPathComponent("MacOS/LightBopomofo"), atomically: true, encoding: .utf8)
+        setxattr(app.path, "com.apple.quarantine", "0081;00000000;test;", 19, 0, 0)
+        return app
+    }
+    let target = tmp.appendingPathComponent("Input Methods")
+
+    let first = Installer(source: makeBundle("1.0"), directory: target, touchesSystem: false)
+    check(first.installedVersion == nil, "nothing installed yet")
+    do { try first.install() } catch { check(false, "install threw \(error)") }
+    check(first.installedVersion == "1.0", "installed 1.0: \(first.installedVersion ?? "-")")
+    check(getxattr(first.destination.path, "com.apple.quarantine", nil, 0, 0, 0) < 0, "quarantine removed")
+
+    let second = Installer(source: makeBundle("1.1"), directory: target, touchesSystem: false)
+    check(second.sourceVersion.compare("1.0", options: .numeric) == .orderedDescending, "1.1 is newer")
+    do { try second.install() } catch { check(false, "reinstall threw \(error)") }
+    check(second.installedVersion == "1.1", "replaced with 1.1: \(second.installedVersion ?? "-")")
+    let leftovers = (try? fm.contentsOfDirectory(atPath: target.path)) ?? []
+    check(leftovers == ["LightBopomofo.app"], "no staging leftovers: \(leftovers)")
+
+    let home = fm.homeDirectoryForCurrentUser
+    check(Installer.isInputMethodsCopy(home.appendingPathComponent("Library/Input Methods/LightBopomofo.app")), "user Input Methods copy")
+    check(Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Library/Input Methods/LightBopomofo.app")), "system Input Methods copy")
+    check(!Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Volumes/輕注音/LightBopomofo.app")), "disk image copy is the installer")
+}
+
 print(failures == 0 ? "OK (\(String(format: "%.2f", Date().timeIntervalSince(started)))s)" : "\(failures) failure(s)")
 exit(failures == 0 ? 0 : 1)

@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>LightBopomofo</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.noky.inputmethod.lightbopomofo</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -24,10 +26,10 @@
 		<dict>
 			<key>dev.noky.inputmethod.lightbopomofo.Bopomofo</key>
 			<dict>
-				<key>TISIntendedLanguage</key>
-				<string>zh-Hant</string>
 				<key>TISIconIsTemplate</key>
 				<true/>
+				<key>TISIntendedLanguage</key>
+				<string>zh-Hant</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
 				<string>icon.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>

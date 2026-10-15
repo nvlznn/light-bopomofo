@@ -7,5 +7,6 @@ OUT="$ROOT/target/macos-tests"
 build_rust
 swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_ffi \
     "$ROOT/macos/Sources/Engine.swift" "$ROOT/macos/Sources/Composer.swift" \
+    "$ROOT/macos/Sources/Installer.swift" \
     "$ROOT/macos/Tests/main.swift" -o "$OUT"
 "$OUT" "$ROOT/data/tsi.csv"
