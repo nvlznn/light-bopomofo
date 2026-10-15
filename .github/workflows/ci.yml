@@ -39,6 +39,11 @@ jobs:
           mkdir -p screenshots
           LIGHTBOPOMOFO_PRETEND_LATEST=2.0 "macos/build/輕注音.app/Contents/MacOS/LightBopomofo" &
           sleep 12
+          # Installing the input method opens System Settings; put the app in front.
+          osascript -e 'tell application "System Settings" to quit' || true
+          sleep 2
+          osascript -e 'tell application "System Events" to set frontmost of (first process whose bundle identifier is "dev.noky.lightbopomofo") to true' || true
+          sleep 2
           screencapture -x screenshots/macos-app-update.png
           kill %1 || true
       - name: Upload screenshots

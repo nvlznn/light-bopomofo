@@ -19,11 +19,26 @@ function Check($name, $condition, $detail = "") {
     else { Write-Host "FAIL $name $detail"; $script:failures += $name }
 }
 
-# The whole screen, into screenshots\ (uploaded by CI).
-function Save-Screen($name) {
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win {
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+}
+"@
+
+# The screen, or one window of it, into screenshots\ (uploaded by CI).
+function Save-Screen($name, $hwnd = [IntPtr]::Zero) {
     Add-Type -AssemblyName System.Drawing, System.Windows.Forms
     New-Item -ItemType Directory -Force "$root\screenshots" | Out-Null
     $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $rect = New-Object Win+RECT
+    if ($hwnd -ne [IntPtr]::Zero -and [Win]::GetWindowRect($hwnd, [ref]$rect)) {
+        $bounds = New-Object System.Drawing.Rectangle $rect.Left, $rect.Top, ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top)
+    }
     $image = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
     $graphics = [System.Drawing.Graphics]::FromImage($image)
     $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
@@ -83,6 +98,9 @@ Check "update link registered" (Test-Path "Registry::HKEY_CLASSES_ROOT\lightbopo
 # 0 up to date, 10 newer release, 1 could not ask GitHub.
 $code = Wait-Exit "$dir\LightBopomofo.exe" @("--check-update", "--now")
 Check "update check reaches GitHub" (($code -eq 0) -or ($code -eq 10)) "(exit $code)"
+# Screenshots on a clear desktop.
+(New-Object -ComObject Shell.Application).MinimizeAll()
+Start-Sleep -Seconds 2
 $code = Wait-Exit "$dir\LightBopomofo.exe" @("--notify-test", "2.0")
 Check "update notification shown" ($code -eq 0) "(exit $code)"
 Start-Sleep -Seconds 3
@@ -91,7 +109,14 @@ Save-Screen "windows-notification"
 $env:LIGHTBOPOMOFO_PRETEND_LATEST = "2.0"
 $shown = Start-Process "$dir\LightBopomofo.exe" -PassThru
 Start-Sleep -Seconds 6
-Save-Screen "windows-app-update"
+$shown.Refresh()
+Check "app stays open" (-not $shown.HasExited) "(exit $(if ($shown.HasExited) { $shown.ExitCode }))"
+if (-not $shown.HasExited) {
+    [Win]::ShowWindow($shown.MainWindowHandle, 9) | Out-Null
+    [Win]::SetForegroundWindow($shown.MainWindowHandle) | Out-Null
+    Start-Sleep -Seconds 1
+    Save-Screen "windows-app-update" $shown.MainWindowHandle
+}
 Stop-Process -Id $shown.Id -Force -ErrorAction SilentlyContinue
 Remove-Item Env:\LIGHTBOPOMOFO_PRETEND_LATEST
 # The scheduled task runs the check as the signed-in user.
@@ -168,6 +193,8 @@ $holder = Start-Process "target\x86_64-pc-windows-msvc\release\examples\e2e.exe"
 # The app is open too, as when it updates itself.
 $app = Start-Process "$dir\LightBopomofo.exe" -PassThru
 Start-Sleep -Seconds 8
+$app.Refresh()
+Write-Host "NOTE app running before the update: $(-not $app.HasExited)"
 $code = Wait-Exit $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-update.log`"")
 Check "update exit code" ($code -eq 0) "($code)"
 Check "loaded DLL moved aside, not left for a reboot" ((Get-ChildItem "$dir\x64" -Filter *.old).Count -ge 1)
