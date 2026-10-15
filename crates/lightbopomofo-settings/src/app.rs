@@ -3,6 +3,8 @@
 
 use std::cell::RefCell;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lightbopomofo_core::history::HistoryEntry;
@@ -19,6 +21,7 @@ use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CLASSES_ROOT,
     HKEY_CURRENT_USER, KEY_READ,
 };
+use windows::Win32::UI::Controls::BST_CHECKED;
 use windows::Win32::UI::Controls::{
     InitCommonControlsEx, ICC_LISTVIEW_CLASSES, ICC_STANDARD_CLASSES, INITCOMMONCONTROLSEX,
     LVCF_TEXT, LVCF_WIDTH, LVCOLUMNW, LVIF_TEXT, LVITEMW, LVM_DELETEALLITEMS, LVM_GETNEXTITEM,
@@ -38,16 +41,19 @@ use windows::Win32::UI::TextServices::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    IsDialogMessageW, LoadIconW, MessageBoxW, PostQuitMessage, RegisterClassExW, SendMessageW,
-    SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage, BN_CLICKED, BS_PUSHBUTTON,
-    CW_USEDEFAULT, EN_CHANGE, ES_AUTOHSCROLL, HMENU, IDYES, MB_ICONWARNING, MB_YESNO, MINMAXINFO,
-    MSG, NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE,
-    SW_SHOW, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_ACTIVATE, WM_COMMAND, WM_CREATE,
-    WM_DESTROY, WM_DPICHANGED, WM_GETMINMAXINFO, WM_NOTIFY, WM_SETFONT, WM_SIZE, WNDCLASSEXW,
-    WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE, WS_OVERLAPPEDWINDOW, WS_TABSTOP,
-    WS_VISIBLE, WS_VSCROLL,
+    IsDialogMessageW, LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassExW,
+    SendMessageW, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage, BM_GETCHECK,
+    BM_SETCHECK, BN_CLICKED, BS_AUTOCHECKBOX, BS_PUSHBUTTON, CW_USEDEFAULT, EN_CHANGE,
+    ES_AUTOHSCROLL, HMENU, IDYES, MB_ICONWARNING, MB_YESNO, MINMAXINFO, MSG, NONCLIENTMETRICSW,
+    SPI_GETNONCLIENTMETRICS, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE, SW_SHOW, SW_SHOWNORMAL,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_ACTIVATE, WM_APP, WM_COMMAND, WM_CREATE, WM_DESTROY,
+    WM_DPICHANGED, WM_GETMINMAXINFO, WM_NOTIFY, WM_SETFONT, WM_SIZE, WNDCLASSEXW, WS_BORDER,
+    WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE,
+    WS_VSCROLL,
 };
 use windows_core::{s, w, BOOL, GUID, PCWSTR, PWSTR};
+
+use crate::update;
 
 // Must match crates/lightbopomofo-windows/src/globals.rs.
 const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x0d5e0d6e_3056_4888_9151_8701b588ad0c);
@@ -62,6 +68,9 @@ const ID_DELETE: i32 = 104;
 const ID_CLEAR: i32 = 105;
 const ID_SITE: i32 = 106;
 const ID_ISSUES: i32 = 107;
+const ID_AUTO_UPDATE: i32 = 108;
+/// Posted by the update thread when it has news (in UPDATE_EVENTS).
+const WM_UPDATE: u32 = WM_APP + 1;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -241,6 +250,96 @@ fn ago(unix: u64) -> String {
 // The window.
 // ---------------------------------------------------------------------------
 
+/// What the big button does.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Primary {
+    #[default]
+    None,
+    Enable,
+    Settings,
+    Update,
+}
+
+/// Where updating stands.
+#[derive(Clone, Default, PartialEq, Eq)]
+enum Update {
+    #[default]
+    Idle,
+    Available(String),
+    /// Looking up the newest release, then downloading it ("" until known).
+    Downloading(String),
+    Failed(String),
+}
+
+/// News from the update thread.
+enum UpdateEvent {
+    Checked(Option<String>),
+    Downloading(String),
+    Downloaded(PathBuf),
+    Failed(String),
+}
+
+static UPDATE_EVENTS: Mutex<Vec<UpdateEvent>> = Mutex::new(Vec::new());
+/// Started from the notification (lightbopomofo:update): update right away.
+static UPDATE_NOW: AtomicBool = AtomicBool::new(false);
+
+/// Look for a newer release on another thread, and with `install` download
+/// it; the window hears of it through WM_UPDATE.
+fn start_update(hwnd: HWND, install: bool) {
+    let target = hwnd.0 as isize;
+    std::thread::spawn(move || {
+        let post = |event: UpdateEvent| {
+            UPDATE_EVENTS.lock().unwrap().push(event);
+            unsafe {
+                let _ = PostMessageW(
+                    Some(HWND(target as *mut _)),
+                    WM_UPDATE,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
+            }
+        };
+        match update::available() {
+            Ok(Some(version)) if install => {
+                post(UpdateEvent::Downloading(version.clone()));
+                match update::download(&version) {
+                    Ok(path) => post(UpdateEvent::Downloaded(path)),
+                    Err(e) => post(UpdateEvent::Failed(e)),
+                }
+            }
+            Ok(found) => post(UpdateEvent::Checked(found)),
+            // A failed background check is not worth a word.
+            Err(e) if install => post(UpdateEvent::Failed(e)),
+            Err(_) => {}
+        }
+    });
+}
+
+/// Apply the update thread's news; returns false once the installer runs
+/// (the window then closes, so the installer can replace this program).
+fn update_events(ui: &mut Ui) -> bool {
+    let events: Vec<UpdateEvent> = std::mem::take(&mut *UPDATE_EVENTS.lock().unwrap());
+    for event in events {
+        ui.update = match event {
+            UpdateEvent::Checked(Some(v)) => Update::Available(v),
+            UpdateEvent::Checked(None) if matches!(ui.update, Update::Downloading(_)) => {
+                Update::Failed("已經是最新版本".to_string())
+            }
+            UpdateEvent::Checked(None) => Update::Idle,
+            UpdateEvent::Downloading(v) => Update::Downloading(v),
+            UpdateEvent::Failed(e) => Update::Failed(e),
+            UpdateEvent::Downloaded(path) => {
+                if update::run_installer(&path) {
+                    return false;
+                }
+                Update::Failed("無法啟動安裝程式".to_string())
+            }
+        };
+    }
+    show_status(ui);
+    true
+}
+
 #[derive(Default)]
 struct Ui {
     hwnd: HWND,
@@ -256,10 +355,13 @@ struct Ui {
     clear: HWND,
     site: HWND,
     issues: HWND,
+    auto_update: HWND,
     font: Option<HFONT>,
     bold: Option<HFONT>,
     dpi: u32,
     status: Option<Status>,
+    primary_action: Primary,
+    update: Update,
     history: Option<History>,
     entries: Vec<HistoryEntry>,
     /// Indices into `entries`, filtered and sorted as shown.
@@ -347,6 +449,7 @@ fn fonts(ui: &mut Ui) {
         ui.clear,
         ui.site,
         ui.issues,
+        ui.auto_update,
     ];
     for c in controls {
         send(c, WM_SETFONT, ui.font.map_or(0, |f| f.0 as usize), 1);
@@ -377,6 +480,13 @@ fn layout(ui: &Ui) {
     place(ui.title, m, m, inner, scale(30, d));
     place(ui.detail, m, m + scale(34, d), inner, scale(40, d));
     place(ui.primary, m, m + scale(78, d), scale(180, d), scale(32, d));
+    place(
+        ui.auto_update,
+        m + scale(196, d),
+        m + scale(82, d),
+        scale(220, d),
+        scale(24, d),
+    );
     place(ui.guide, m, m + scale(124, d), inner, scale(110, d));
     let hy = m + scale(244, d);
     place(
@@ -431,25 +541,53 @@ fn layout(ui: &Ui) {
 fn show_status(ui: &mut Ui) {
     let s = status();
     ui.status = Some(s);
-    let (title, detail, button) = match s {
-        Status::NotInstalled => (
+    let (title, detail, primary) = match (&ui.update, s) {
+        (Update::Downloading(v), _) => (
+            if v.is_empty() {
+                "正在下載新版本…".to_string()
+            } else {
+                format!("正在下載輕注音 {v}…")
+            },
+            "下載完成後會自動安裝，不需要關閉其他程式或重新開機。".to_string(),
+            Primary::None,
+        ),
+        (Update::Available(v), _) => (
+            format!("有新版本：輕注音 {v}"),
+            format!("目前是 {VERSION}。按「更新」下載並安裝，不需要關閉其他程式或重新開機。"),
+            Primary::Update,
+        ),
+        (Update::Failed(e), _) => (
+            "無法更新".to_string(),
+            format!("{e}。可以再試一次，或到官網下載新版。"),
+            Primary::Update,
+        ),
+        (Update::Idle, Status::NotInstalled) => (
             "輸入法沒有安裝".to_string(),
-            "請重新執行輕注音的安裝程式。",
-            None,
+            "請重新執行輕注音的安裝程式。".to_string(),
+            Primary::None,
         ),
-        Status::NotEnabled => (
+        (Update::Idle, Status::NotEnabled) => (
             "輕注音已安裝，還沒加入輸入法".to_string(),
-            "按下面的按鈕把它加入你的輸入法清單。",
-            Some("加入輸入法"),
+            "按下面的按鈕把它加入你的輸入法清單。".to_string(),
+            Primary::Enable,
         ),
-        Status::Ready => (
+        (Update::Idle, Status::Ready) => (
             format!("輕注音 {VERSION} 可以使用了"),
-            "按 Windows 鍵 + 空白鍵 切換到「輕注音」就可以打字；按一下 Shift 切換中／英。",
-            Some("開啟語言設定"),
+            "按 Windows 鍵 + 空白鍵 切換到「輕注音」就可以打字；按一下 Shift 切換中／英。"
+                .to_string(),
+            Primary::Settings,
         ),
     };
+    ui.primary_action = primary;
+    let button = match primary {
+        Primary::None => None,
+        Primary::Enable => Some("加入輸入法"),
+        Primary::Settings => Some("開啟語言設定"),
+        Primary::Update if matches!(ui.update, Update::Failed(_)) => Some("再試一次"),
+        Primary::Update => Some("更新"),
+    };
     set_text(ui.title, &title);
-    set_text(ui.detail, detail);
+    set_text(ui.detail, &detail);
     match button {
         Some(label) => unsafe {
             set_text(ui.primary, label);
@@ -682,6 +820,23 @@ fn create(hwnd: HWND) {
             0,
             ID_ISSUES,
         );
+        ui.auto_update = child(
+            hwnd,
+            bt,
+            "自動檢查更新",
+            BS_AUTOCHECKBOX as u32 | WS_TABSTOP.0,
+            0,
+            ID_AUTO_UPDATE,
+        );
+        if update::auto_check() {
+            send(ui.auto_update, BM_SETCHECK, BST_CHECKED.0 as usize, 0);
+        }
+        if UPDATE_NOW.load(Ordering::Relaxed) {
+            ui.update = Update::Downloading(String::new());
+            start_update(hwnd, true);
+        } else if update::auto_check() {
+            start_update(hwnd, false);
+        }
         fonts(&mut ui);
         layout(&ui);
         show_status(&mut ui);
@@ -693,13 +848,26 @@ fn command(id: i32, code: u32) {
     UI.with(|cell| {
         let mut ui = cell.borrow_mut();
         match (id, code) {
-            (ID_PRIMARY, BN_CLICKED) => match ui.status {
-                Some(Status::NotEnabled) => {
+            (ID_PRIMARY, BN_CLICKED) => match ui.primary_action {
+                Primary::Enable => {
                     install_layout_or_tip(true);
                     show_status(&mut ui);
                 }
-                _ => open(w!("ms-settings:regionlanguage")),
+                Primary::Settings => open(w!("ms-settings:regionlanguage")),
+                Primary::Update => {
+                    ui.update = Update::Downloading(match &ui.update {
+                        Update::Available(v) => v.clone(),
+                        _ => String::new(),
+                    });
+                    start_update(ui.hwnd, true);
+                    show_status(&mut ui);
+                }
+                Primary::None => {}
             },
+            (ID_AUTO_UPDATE, BN_CLICKED) => {
+                let on = send(ui.auto_update, BM_GETCHECK, 0, 0) == BST_CHECKED.0 as isize;
+                update::set_auto_check(on);
+            }
             (ID_SEARCH, EN_CHANGE) => fill_list(&mut ui),
             (ID_DELETE, BN_CLICKED) => delete_selected(&mut ui),
             (ID_CLEAR, BN_CLICKED) => clear_all(&mut ui),
@@ -806,6 +974,15 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             notify(lparam.0 as *const NMHDR);
             LRESULT(0)
         }
+        WM_UPDATE => {
+            let keep = UI.with(|cell| update_events(&mut cell.borrow_mut()));
+            if !keep {
+                unsafe {
+                    let _ = DestroyWindow(hwnd);
+                }
+            }
+            LRESULT(0)
+        }
         WM_DESTROY => {
             unsafe { PostQuitMessage(0) };
             LRESULT(0)
@@ -815,7 +992,32 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
 }
 
 pub fn main() {
-    match std::env::args().nth(1).as_deref() {
+    let args: Vec<String> = std::env::args().collect();
+    match args.get(1).map(String::as_str) {
+        Some("--check-update") => {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            }
+            let now = args.get(2).map(String::as_str) == Some("--now");
+            std::process::exit(update::check_in_background(now))
+        }
+        // The installer, as administrator.
+        Some("--register-update-task") => std::process::exit(i32::from(!update::register_task())),
+        Some("--unregister-update-task") => {
+            std::process::exit(i32::from(!update::unregister_task()))
+        }
+        // For tests: show the notification for this version.
+        Some("--notify-test") => {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            }
+            std::process::exit(i32::from(
+                update::notify(&update::current_version()).is_err(),
+            ))
+        }
+        Some(url) if url.starts_with("lightbopomofo:update") => {
+            UPDATE_NOW.store(true, Ordering::Relaxed)
+        }
         Some("--enable") => std::process::exit(if install_layout_or_tip(true) { 0 } else { 1 }),
         Some("--disable") => std::process::exit(if install_layout_or_tip(false) { 0 } else { 1 }),
         // For tests and diagnosis: 0 ready, 1 installed but not in the

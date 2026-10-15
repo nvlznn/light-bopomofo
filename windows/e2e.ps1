@@ -64,6 +64,21 @@ Check "Start menu shortcut" (Test-Path "$env:ProgramData\Microsoft\Windows\Start
 $code = Wait-Exit "$dir\LightBopomofo.exe" @("--status")
 Check "app reports ready" ($code -eq 0) "(status $code)"
 
+Write-Host "== updates"
+$task = "LightBopomofo\UpdateCheck"
+Check "update check scheduled" ((Wait-Exit "schtasks.exe" @("/Query", "/TN", $task)) -eq 0)
+Check "update link registered" (Test-Path "Registry::HKEY_CLASSES_ROOT\lightbopomofo\shell\open\command")
+# 0 up to date, 10 newer release, 1 could not ask GitHub.
+$code = Wait-Exit "$dir\LightBopomofo.exe" @("--check-update", "--now")
+Check "update check reaches GitHub" (($code -eq 0) -or ($code -eq 10)) "(exit $code)"
+$code = Wait-Exit "$dir\LightBopomofo.exe" @("--notify-test")
+Check "update notification shown" ($code -eq 0) "(exit $code)"
+# The scheduled task runs the check as the signed-in user.
+Remove-ItemProperty "HKCU:\Software\LightBopomofo" -Name LastUpdateCheck -ErrorAction SilentlyContinue
+$null = Wait-Exit "schtasks.exe" @("/Run", "/TN", $task)
+Start-Sleep -Seconds 20
+Check "scheduled update check ran" ($null -ne (Get-ItemProperty "HKCU:\Software\LightBopomofo" -ErrorAction SilentlyContinue).LastUpdateCheck)
+
 Write-Host "== type"
 Run-Typing "x86_64-pc-windows-msvc" "64-bit"
 Run-Typing "i686-pc-windows-msvc" "32-bit"
@@ -129,11 +144,16 @@ public static class Fg {
 
 Write-Host "== update while in use"
 $holder = Start-Process "target\x86_64-pc-windows-msvc\release\examples\e2e.exe" -ArgumentList "--hold", "180" -PassThru
+# The app is open too, as when it updates itself.
+$app = Start-Process "$dir\LightBopomofo.exe" -PassThru
 Start-Sleep -Seconds 8
 $code = Wait-Exit $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-update.log`"")
 Check "update exit code" ($code -eq 0) "($code)"
 Check "loaded DLL moved aside, not left for a reboot" ((Get-ChildItem "$dir\x64" -Filter *.old).Count -ge 1)
 Check "new DLL in place" (Test-Path "$dir\x64\lightbopomofo.dll")
+Check "running app moved aside" ((Get-ChildItem $dir -Filter "LightBopomofo.*.old").Count -ge 1)
+Check "new app in place" (Test-Path "$dir\LightBopomofo.exe")
+Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 Run-Typing "x86_64-pc-windows-msvc" "64-bit, after update"
 Stop-Process -Id $holder.Id -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
@@ -147,6 +167,8 @@ Check "32-bit COM class removed" ($null -eq (Server-Path "Registry32"))
 Check "removed from the user's input methods" (-not (In-UserList))
 Check "DLLs removed" ((-not (Test-Path "$dir\x64\lightbopomofo.dll")) -and (-not (Test-Path "$dir\x86\lightbopomofo.dll")))
 Check "history kept" (Test-Path $history)
+Check "update check unscheduled" ((Wait-Exit "schtasks.exe" @("/Query", "/TN", $task)) -ne 0)
+Check "update link removed" (-not (Test-Path "Registry::HKEY_CLASSES_ROOT\lightbopomofo"))
 # Files still in use (an application kept the old DLL loaded) are queued for
 # deletion at restart rather than left behind for good.
 $left = Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue

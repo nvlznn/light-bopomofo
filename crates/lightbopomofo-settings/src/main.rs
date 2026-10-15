@@ -4,6 +4,10 @@
 //!   LightBopomofo.exe --enable   add 輕注音 to the user's input methods (installer)
 //!   LightBopomofo.exe --disable  remove it (uninstaller)
 //!   LightBopomofo.exe --status   exit code 0 ready, 1 not in the list, 2 not installed
+//!   LightBopomofo.exe --check-update [--now]
+//!                                notify of a newer release (scheduled task)
+//!   LightBopomofo.exe lightbopomofo:update
+//!                                download and install it (the notification)
 //!
 //! History edits take effect in every application right away: the input
 //! method re-reads the history file when it changes.
@@ -12,6 +16,8 @@
 
 #[cfg(windows)]
 mod app;
+#[cfg(windows)]
+mod update;
 
 #[cfg(windows)]
 fn main() {

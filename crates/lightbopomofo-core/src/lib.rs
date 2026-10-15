@@ -6,6 +6,7 @@ pub mod dachen;
 pub mod engine;
 pub mod history;
 pub mod lexicon;
+pub mod release;
 
 pub use composer::{Composer, Key, KeyResult};
 pub use engine::{Candidate, Engine};

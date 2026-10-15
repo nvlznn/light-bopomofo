@@ -65,17 +65,27 @@ Source: "{#Stage}\x64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\arm64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsArm64
 
 [Icons]
-Name: "{autoprograms}\輕注音"; Filename: "{app}\LightBopomofo.exe"
+; AppUserModelID: lets the app show notifications (update.rs APP_ID).
+Name: "{autoprograms}\輕注音"; Filename: "{app}\LightBopomofo.exe"; AppUserModelID: "Noky.LightBopomofo"
+
+[Registry]
+; lightbopomofo:update — what the update notification opens.
+Root: HKLM; Subkey: "Software\Classes\lightbopomofo"; ValueType: string; ValueName: ""; ValueData: "URL:輕注音"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\lightbopomofo"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKLM; Subkey: "Software\Classes\lightbopomofo\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\LightBopomofo.exe"" ""%1"""
 
 [Run]
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\x64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsX64OS
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\arm64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsArm64
 Filename: "{syswow64}\regsvr32.exe"; Parameters: "/s ""{app}\x86\lightbopomofo.dll"""; Flags: runhidden waituntilterminated
+; Check for updates at sign-in and once a day (the app can turn it off).
+Filename: "{app}\LightBopomofo.exe"; Parameters: "--register-update-task"; Flags: runhidden waituntilterminated
 ; Add 輕注音 to the input methods of the user who ran the installer.
 Filename: "{app}\LightBopomofo.exe"; Parameters: "--enable"; Flags: runasoriginaluser runhidden waituntilterminated
 Filename: "{app}\LightBopomofo.exe"; Description: "開啟輕注音"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
+Filename: "{app}\LightBopomofo.exe"; Parameters: "--unregister-update-task"; Flags: runhidden waituntilterminated; RunOnceId: "unregtask"
 Filename: "{app}\LightBopomofo.exe"; Parameters: "--disable"; Flags: runhidden waituntilterminated; RunOnceId: "disable"
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\x64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsX64OS; RunOnceId: "unreg64"
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\arm64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsArm64; RunOnceId: "unregarm64"
@@ -88,23 +98,28 @@ Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\x86\lightbopomof
   new files, move the old DLLs aside: running applications keep using the
   old copy, new ones load the new one, and nobody has to restart. Copies
   left from earlier updates are deleted when no longer in use. }
-procedure MoveAside(const Dir: String);
+procedure MoveFileAside(const Dir, Name, Stem: String);
 var
   Dll, Old: String;
   N: Integer;
 begin
-  Dll := Dir + '\lightbopomofo.dll';
+  Dll := Dir + '\' + Name;
   if not FileExists(Dll) then
     Exit;
   N := 0;
   repeat
-    Old := Dir + '\lightbopomofo.' + IntToStr(N) + '.old';
+    Old := Dir + '\' + Stem + '.' + IntToStr(N) + '.old';
     if FileExists(Old) then
       DeleteFile(Old);
     N := N + 1;
   until (not FileExists(Old)) or (N > 50);
   if not RenameFile(Dll, Old) then
     Log('Could not move ' + Dll + ' aside');
+end;
+
+procedure MoveAside(const Dir: String);
+begin
+  MoveFileAside(Dir, 'lightbopomofo.dll', 'lightbopomofo');
 end;
 
 procedure CleanOld(const Dir: String);
@@ -159,6 +174,7 @@ begin
     DeleteOldOrAtRestart(ExpandConstant('{app}\x64'));
     DeleteOldOrAtRestart(ExpandConstant('{app}\x86'));
     DeleteOldOrAtRestart(ExpandConstant('{app}\arm64'));
+    DeleteOldOrAtRestart(ExpandConstant('{app}'));
     if not RemoveDir(ExpandConstant('{app}')) then
       MoveFileExW(ExpandConstant('{app}'), 0, MOVEFILE_DELAY_UNTIL_REBOOT);
   end;
@@ -171,11 +187,14 @@ begin
     MoveAside(ExpandConstant('{app}\x64'));
     MoveAside(ExpandConstant('{app}\x86'));
     MoveAside(ExpandConstant('{app}\arm64'));
+    { The app may be open (it starts the installer when updating itself). }
+    MoveFileAside(ExpandConstant('{app}'), 'LightBopomofo.exe', 'LightBopomofo');
   end;
   if CurStep = ssPostInstall then
   begin
     CleanOld(ExpandConstant('{app}\x64'));
     CleanOld(ExpandConstant('{app}\x86'));
     CleanOld(ExpandConstant('{app}\arm64'));
+    CleanOld(ExpandConstant('{app}'));
   end;
 end;

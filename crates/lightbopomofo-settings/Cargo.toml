@@ -18,8 +18,11 @@ embed-resource = "3"
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.62"
 windows = { version = "0.62", features = [
+    "Data_Xml_Dom",
+    "UI_Notifications",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Networking_WinHttp",
     "Win32_Security",
     "Win32_System_Com",
     "Win32_System_LibraryLoader",
