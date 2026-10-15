@@ -69,11 +69,15 @@ fn tone_narrows_candidates() {
     assert!(!c.contains(&"媽".to_string()), "{c:?}");
 }
 
+// Timing is only meaningful for an optimized build measured alone, which is
+// what users run: CI runs it with
+//   cargo test --release -p lightbopomofo-core --test real_lexicon -- --ignored --test-threads=1
+// (under the debug-info test profile, alongside other tests on a shared
+// runner, it measured several times slower than the code really is).
 #[test]
+#[ignore = "timing: run with --release --ignored --test-threads=1"]
 fn long_input_is_fast() {
-    // 40 symbols of mixed abbreviated input. The budget is 10 ms at p95
-    // (shared CI machines running tests in parallel see occasional spikes,
-    // so the slowest single run is not the measure).
+    // 40 symbols of mixed abbreviated input. The budget is 10 ms at p95.
     let input =
         "ㄐㄊㄊㄑㄏㄏㄨㄇㄑㄍㄩㄢˊㄗㄡˇㄗㄡˇㄨㄒㄓㄑㄩㄔㄈㄍㄗㄈㄈㄋㄏㄇㄊㄑㄏㄏㄨㄒㄓㄐㄊㄊ";
     assert!(input.chars().count() >= 40);

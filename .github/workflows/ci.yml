@@ -19,6 +19,8 @@ jobs:
         shell: bash
         run: scripts/fetch-lexicon.sh
       - run: cargo test --workspace
+      - name: Query speed (optimized, measured alone)
+        run: cargo test --release -p lightbopomofo-core --test real_lexicon -- --ignored --test-threads=1
 
   macos-shell:
     runs-on: macos-latest
