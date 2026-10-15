@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File windows\build.ps1
 
 ## 發布新版（macOS）
 
-1. 改 `macos/App/Info.plist` 的 `CFBundleShortVersionString`（輸入法會自動跟著）與 `CFBundleVersion`，更新 `macos/RELEASE_NOTES.md`。
+1. 改版本號：`macos/App/Info.plist` 的 `CFBundleShortVersionString`（輸入法會自動跟著）與 `CFBundleVersion`，以及 `Cargo.toml` 的 `version`（Windows 版用它）。更新 `macos/RELEASE_NOTES.md`。
 2. 在「終端機」App 執行 `macos/release.sh`（第一次要對鑰匙圈的詢問按「永遠允許」）。它會簽署、公證、staple，產生 `dist/LightBopomofo.dmg`。
 3. 用 git 建 tag 再建 Release（`gh` 沒有 `workflow` 權限時無法替含 CI 設定的 commit 建 tag）：
    ```sh
@@ -72,6 +72,8 @@ powershell -ExecutionPolicy Bypass -File windows\build.ps1
    gh release create vX.Y.Z dist/LightBopomofo.dmg --verify-tag --title "輕注音 X.Y.Z" --notes-file macos/RELEASE_NOTES.md
    ```
    檔名固定為 `LightBopomofo.dmg`，官網的 `releases/latest/download/LightBopomofo.dmg` 連結就不用改。
+
+Release 發布後，`.github/workflows/release.yml` 會建置 Windows 安裝檔並附加到同一個 Release（`LightBopomofo-Setup.exe`）——前提是 GitHub 專案變數 `WINDOWS_RELEASE` 設為 `true`（Windows 版測試通過後才設定）。
 
 官網（`website/`）在 push 到 `main` 時由 Vercel 自動部署。
 

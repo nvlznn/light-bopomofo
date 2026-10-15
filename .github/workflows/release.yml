@@ -1,0 +1,45 @@
+name: Release
+
+# When a GitHub release is published (macos/release.sh --publish creates one
+# with the notarized dmg), build the Windows installer and attach it.
+# Only once Windows is approved for release: set the repository variable
+# WINDOWS_RELEASE to "true" (Settings → Secrets and variables → Actions).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the Windows installer to (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    if: vars.WINDOWS_RELEASE == 'true'
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+      - name: Tag matches Cargo.toml version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "tag $env:TAG does not match Cargo.toml version $version" }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
+      - name: Build input method, app and installer
+        shell: pwsh
+        run: windows/build.ps1
+      - name: Attach installer to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:TAG dist/LightBopomofo-Setup.exe --clobber --repo ${{ github.repository }}
