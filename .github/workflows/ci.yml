@@ -44,6 +44,10 @@ jobs:
       - name: Build input method, app and installer
         shell: pwsh
         run: windows/build.ps1
+      - name: Type into Notepad through the input method (experimental)
+        continue-on-error: true
+        shell: pwsh
+        run: windows/e2e.ps1
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
