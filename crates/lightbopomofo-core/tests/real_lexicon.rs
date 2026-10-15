@@ -50,6 +50,32 @@ fn abbreviated_phrase_and_prefix() {
 }
 
 #[test]
+fn full_syllable_is_not_split() {
+    // ㄋ|ㄧˇ (難以, 年…) and ㄊ|ㄧㄢ, ㄊㄧ|ㄢ (討厭, 提案…) cut a syllable.
+    for (input, junk) in [
+        ("ㄋㄧˇ", ["難以", "年", "南亞"]),
+        ("ㄊㄧㄢ", ["討厭", "提案", "統一"]),
+    ] {
+        let t = top(input, 20);
+        assert!(
+            t.iter().all(|x| !junk.contains(&x.as_str())),
+            "{input}: {t:?}"
+        );
+    }
+    assert_eq!(top("ㄊㄧㄢ", 4), ["天", "填", "田", "甜"]);
+}
+
+#[test]
+fn single_character_is_reachable_after_abbreviated_words() {
+    // Like the iPhone: common words for the whole input, then characters.
+    let t = top("ㄋㄏ", 15);
+    assert!(t.contains(&"你".to_string()), "{t:?}");
+    let c = engine().query_str("ㄍㄗㄈㄈ");
+    let pos = |s: &str| c.iter().position(|c| c.text == s).unwrap();
+    assert!(pos("工作") < pos("工"), "{:?}", texts(&c));
+}
+
+#[test]
 fn mixed_full_and_abbreviated() {
     assert!(top("ㄋㄧˇㄏㄇ", 5).contains(&"你好嗎".to_string()));
     assert_eq!(top("ㄋㄧㄏㄠㄇㄚ", 1), ["你好嗎"]);

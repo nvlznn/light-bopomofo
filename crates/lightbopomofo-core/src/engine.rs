@@ -7,6 +7,15 @@
 //! whole-input conversion; edges starting at position 0 give the
 //! prefix-only candidates.
 //!
+//! A slot cut short — the next symbol would continue it into a longer
+//! syllable, as ㄧ does after ㄋ — is heavily penalized, so a fully typed
+//! syllable stays one character (ㄋㄧˇ is 你, not 難以 from ㄋ|ㄧˇ).
+//!
+//! Candidates come in tiers, like the iPhone keyboard: the whole input
+//! (conversion and common words covering it all), common words covering a
+//! front part, common single characters for the first syllable, then
+//! everything else by score.
+//!
 //! History: a word the user chose for exactly the same symbols wins its span
 //! (it is lifted just above the span's best word) without making the lattice
 //! prefer splitting into learned pieces. A whole input the user committed
@@ -30,6 +39,8 @@ pub const SLOT_PARTIAL: f64 = -2.0;
 /// Extra for an incomplete slot that ends in a tone: a tone usually means the
 /// syllable is finished, so ㄧˋ should be 一 (ㄧˋ) before 頁 (ㄧㄝˋ).
 pub const SLOT_TONED_INCOMPLETE: f64 = -3.0;
+/// Slot ends where the next symbol would continue its syllable (ㄋ|ㄧ).
+pub const SLOT_CUT: f64 = -6.0;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
 /// A learned word scores this much above the best word for the same symbols.
@@ -40,6 +51,13 @@ pub const HISTORY_WEIGHT: f64 = 1.0;
 pub const UNKNOWN_SYMBOL: f64 = -50.0;
 /// Upper bound on returned candidates.
 pub const MAX_CANDIDATES: usize = 100;
+/// Tier limits: (score margin below the tier's best, maximum count).
+/// Whole-input words.
+pub const TIER_WHOLE: (f64, usize) = (3.0, 10);
+/// Words covering a front part of the input.
+pub const TIER_PREFIX: (f64, usize) = (3.0, 10);
+/// Single characters for the first syllable.
+pub const TIER_CHAR: (f64, usize) = (5.0, 20);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
@@ -64,6 +82,8 @@ struct Edge {
     /// `None` is an unknown-symbol edge.
     entry: Option<u32>,
     score: f64,
+    /// Some slot is cut short (see [`SLOT_CUT`]).
+    cut: bool,
 }
 
 pub struct Engine {
@@ -123,6 +143,7 @@ impl Engine {
                     end: start + 1,
                     entry: None,
                     score: UNKNOWN_SYMBOL,
+                    cut: false,
                 });
             }
         }
@@ -155,9 +176,9 @@ impl Engine {
         candidates.push(full);
 
         // Prefix candidates, one per text (the one covering the most input),
-        // covering more input first, then by score.
+        // with whether they cut a syllable short.
         let mut seen: HashMap<String, usize> = HashMap::new();
-        let mut prefix: Vec<Candidate> = Vec::new();
+        let mut prefix: Vec<(Candidate, bool)> = Vec::new();
         for (edge, _) in from_zero {
             let entry = self
                 .lexicon
@@ -177,23 +198,53 @@ impl Engine {
             };
             match seen.get(&text) {
                 Some(&i) => {
-                    let old = &prefix[i];
+                    let old = &prefix[i].0;
                     if (edge.end, edge.score) > (old.consumed, old.score) {
-                        prefix[i] = candidate;
+                        prefix[i] = (candidate, edge.cut);
                     }
                 }
                 None => {
                     seen.insert(text, prefix.len());
-                    prefix.push(candidate);
+                    prefix.push((candidate, edge.cut));
                 }
             }
         }
-        prefix.sort_by(|a, b| {
-            b.consumed
-                .cmp(&a.consumed)
-                .then(b.score.total_cmp(&a.score))
-        });
-        candidates.extend(prefix);
+        prefix.sort_by(|a, b| b.0.score.total_cmp(&a.0.score));
+        // Tiers: each takes the candidates that fit and cut no syllable,
+        // within a margin of the best of them (or of `bar`, when higher), up
+        // to a count. The rest follow by score, those cutting a syllable last.
+        let mut taken = vec![false; prefix.len()];
+        let mut tier =
+            |fits: &dyn Fn(&Candidate) -> bool, bar: f64, (margin, max): (f64, usize)| {
+                let mut picked = Vec::new();
+                let fits = |(c, cut): &(Candidate, bool)| !cut && fits(c);
+                let Some(best) = prefix.iter().find(|c| fits(c)).map(|c| c.0.score.max(bar)) else {
+                    return picked;
+                };
+                for (i, c) in prefix.iter().enumerate() {
+                    if picked.len() == max || c.0.score < best - margin {
+                        break;
+                    }
+                    if !taken[i] && fits(c) {
+                        taken[i] = true;
+                        picked.push(c.0.clone());
+                    }
+                }
+                picked
+            };
+        let single = |c: &Candidate| c.text.chars().count() == 1;
+        let bar = candidates[0].score;
+        let whole = tier(&|c| c.consumed == n, bar, TIER_WHOLE);
+        let front = tier(&|c| c.consumed < n && !single(c), f64::MIN, TIER_PREFIX);
+        let chars = tier(&single, f64::MIN, TIER_CHAR);
+        let mut rest: Vec<(Candidate, bool)> = prefix
+            .into_iter()
+            .zip(taken)
+            .filter_map(|(c, t)| (!t).then_some(c))
+            .collect();
+        rest.sort_by_key(|&(_, cut)| cut);
+        let rest = rest.into_iter().map(|(c, _)| c);
+        candidates.extend(whole.into_iter().chain(front).chain(chars).chain(rest));
 
         // A whole input committed before comes back first.
         let whole: String = input.iter().collect();
@@ -318,6 +369,10 @@ impl Engine {
                 self.history
                     .learned(&input[start..pos].iter().collect::<String>())
             };
+            let cuts = slots
+                .iter()
+                .filter(|&&(a, b)| spans[a].last().is_some_and(|&end| end > b))
+                .count();
             for id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
                     // Only look at the text when this span has learned choices.
@@ -334,7 +389,8 @@ impl Engine {
                         start,
                         end: pos,
                         entry: Some(id),
-                        score,
+                        score: score + SLOT_CUT * cuts as f64,
+                        cut: cuts > 0,
                     };
                     emit(edge, used);
                 }
