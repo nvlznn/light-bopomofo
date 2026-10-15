@@ -16,6 +16,9 @@
 //! front part, common single characters for the first syllable, then
 //! everything else by score.
 //!
+//! The bopomofo itself is always a candidate, last on the first page, to
+//! type the symbols as they are; it is never learned.
+//!
 //! History: a word the user chose for exactly the same symbols wins its span
 //! (it is lifted just above the span's best word) without making the lattice
 //! prefer splitting into learned pieces. A whole input the user committed
@@ -51,6 +54,9 @@ pub const HISTORY_WEIGHT: f64 = 1.0;
 pub const UNKNOWN_SYMBOL: f64 = -50.0;
 /// Upper bound on returned candidates.
 pub const MAX_CANDIDATES: usize = 100;
+/// Where the bopomofo itself goes: last on the first page of the candidate
+/// window, or last when there are fewer candidates.
+pub const RAW_POSITION: usize = crate::composer::PAGE_SIZE - 1;
 /// Tier limits: (score margin below the tier's best, maximum count).
 /// Whole-input words.
 pub const TIER_WHOLE: (f64, usize) = (3.0, 10);
@@ -269,7 +275,20 @@ impl Engine {
                 },
             );
         }
-        candidates.truncate(MAX_CANDIDATES);
+        // The symbols as typed, last on the first page (Shift+9).
+        let raw: String = input.iter().collect();
+        candidates.retain(|c| c.text != raw);
+        candidates.truncate(MAX_CANDIDATES - 1);
+        let at = candidates.len().min(RAW_POSITION);
+        candidates.insert(
+            at,
+            Candidate {
+                text: raw,
+                consumed: n,
+                score: f64::NEG_INFINITY,
+                words: Vec::new(),
+            },
+        );
         candidates
     }
 

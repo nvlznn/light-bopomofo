@@ -247,3 +247,33 @@ fn switching_language_drops_the_composition() {
     assert_eq!(c.handle(&mut e, Key::Abandon), KeyResult::default());
     assert!(c.is_empty() && c.candidates().is_empty());
 }
+
+#[test]
+fn bopomofo_itself_is_ninth_and_not_learned() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏㄇ");
+    assert!(c.candidates().len() > PAGE_SIZE);
+    assert_eq!(c.candidates()[PAGE_SIZE - 1].text, "ㄋㄏㄇ");
+    let raw = c.candidates().iter().filter(|x| x.text == "ㄋㄏㄇ").count();
+    assert_eq!(raw, 1);
+    // Shift+9 types the symbols; they are not learned.
+    assert_eq!(c.handle(&mut e, Key::Select(9)), handled("ㄋㄏㄇ"));
+    assert!(c.is_empty());
+    assert!(e.history_entries().is_empty());
+    typing(&mut c, &mut e, "ㄋㄏㄇ");
+    assert_eq!(first(&c), "你好嗎");
+}
+
+#[test]
+fn bopomofo_itself_is_last_when_there_are_few() {
+    let e = engine();
+    for input in ["ㄋ", "ㄦˋ", "ㄋㄏㄇ", "ㄍㄗㄈㄈ", "ㄖㄖㄖㄖㄖㄖㄖㄖ"] {
+        let candidates = e.query_str(input);
+        let at = candidates.iter().position(|x| x.text == input);
+        assert_eq!(
+            at,
+            Some((candidates.len() - 1).min(PAGE_SIZE - 1)),
+            "{input}"
+        );
+    }
+}

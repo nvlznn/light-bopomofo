@@ -228,6 +228,15 @@ do {
     check(!Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Volumes/輕注音/LightBopomofo.app")), "disk image copy is the installer")
 }
 
+// The bopomofo itself is the ninth candidate (Shift+9).
+do {
+    let c = makeComposer()
+    type(c, "ㄋㄏㄇ")
+    check(c.candidates.count > 9 && c.candidates[8].text == "ㄋㄏㄇ", "ㄋㄏㄇ is ninth: \(c.candidates.prefix(9).map(\.text))")
+    check(c.handle(.select(9)) == KeyResult(handled: true, commit: "ㄋㄏㄇ"), "shift+9 types ㄋㄏㄇ")
+    check(c.composingText.isEmpty, "nothing left composing")
+}
+
 // Which release is newer (UpdateCheck).
 do {
     let json = Data("""
