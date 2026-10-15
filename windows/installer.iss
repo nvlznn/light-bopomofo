@@ -55,9 +55,11 @@ Source: "{#Stage}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 ; The input method, one DLL per architecture of the applications that load it.
 ; On Arm64, x64 applications (emulated) share the 64-bit registration with
 ; Arm64 ones, so only the Arm64 DLL is registered there.
-Source: "{#Stage}\x64\lightbopomofo.dll"; DestDir: "{app}\x64"; Flags: ignoreversion; Check: IsX64OS
-Source: "{#Stage}\arm64\lightbopomofo.dll"; DestDir: "{app}\arm64"; Flags: ignoreversion; Check: IsArm64
-Source: "{#Stage}\x86\lightbopomofo.dll"; DestDir: "{app}\x86"; Flags: ignoreversion
+; uninsrestartdelete: applications still running when uninstalling hold the
+; DLL; it is then deleted at the next restart.
+Source: "{#Stage}\x64\lightbopomofo.dll"; DestDir: "{app}\x64"; Flags: ignoreversion uninsrestartdelete; Check: IsX64OS
+Source: "{#Stage}\arm64\lightbopomofo.dll"; DestDir: "{app}\arm64"; Flags: ignoreversion uninsrestartdelete; Check: IsArm64
+Source: "{#Stage}\x86\lightbopomofo.dll"; DestDir: "{app}\x86"; Flags: ignoreversion uninsrestartdelete
 ; The app.
 Source: "{#Stage}\x64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsX64OS
 Source: "{#Stage}\arm64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsArm64
@@ -79,11 +81,6 @@ Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\x64\lightbopomofo.dll
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\arm64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsArm64; RunOnceId: "unregarm64"
 Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\x86\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; RunOnceId: "unreg32"
 
-[UninstallDelete]
-; DLLs moved aside by updates (see below).
-Type: files; Name: "{app}\x64\*.old"
-Type: files; Name: "{app}\x86\*.old"
-Type: files; Name: "{app}\arm64\*.old"
 
 [Code]
 { A loaded DLL cannot be overwritten, but it can be renamed. Every running
@@ -123,6 +120,47 @@ begin
     finally
       FindClose(FindRec);
     end;
+  end;
+end;
+
+const
+  MOVEFILE_DELAY_UNTIL_REBOOT = 4;
+
+function MoveFileExW(Existing: String; NewName: Cardinal; Flags: Cardinal): Boolean;
+  external 'MoveFileExW@kernel32.dll stdcall';
+
+{ Delete DLLs moved aside by updates; one still loaded by a running
+  application is deleted at the next restart, and so is its folder. }
+procedure DeleteOldOrAtRestart(const Dir: String);
+var
+  FindRec: TFindRec;
+  Path: String;
+begin
+  if FindFirst(Dir + '\*.old', FindRec) then
+  begin
+    try
+      repeat
+        Path := Dir + '\' + FindRec.Name;
+        if not DeleteFile(Path) then
+          MoveFileExW(Path, 0, MOVEFILE_DELAY_UNTIL_REBOOT);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+  if not RemoveDir(Dir) then
+    MoveFileExW(Dir, 0, MOVEFILE_DELAY_UNTIL_REBOOT);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DeleteOldOrAtRestart(ExpandConstant('{app}\x64'));
+    DeleteOldOrAtRestart(ExpandConstant('{app}\x86'));
+    DeleteOldOrAtRestart(ExpandConstant('{app}\arm64'));
+    if not RemoveDir(ExpandConstant('{app}')) then
+      MoveFileExW(ExpandConstant('{app}'), 0, MOVEFILE_DELAY_UNTIL_REBOOT);
   end;
 end;
 

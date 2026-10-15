@@ -86,6 +86,17 @@ Check "32-bit COM class removed" ($null -eq (Server-Path "Registry32"))
 Check "removed from the user's input methods" (-not (In-UserList))
 Check "DLLs removed" ((-not (Test-Path "$dir\x64\lightbopomofo.dll")) -and (-not (Test-Path "$dir\x86\lightbopomofo.dll")))
 Check "history kept" (Test-Path $history)
+# Files still in use (an application kept the old DLL loaded) are queued for
+# deletion at restart rather than left behind for good.
+$left = Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue
+if ($left) {
+    $pending = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -ErrorAction SilentlyContinue).PendingFileRenameOperations -join "`n"
+    foreach ($f in $left) {
+        Check "leftover $($f.Name) deleted at restart" ($pending -like "*$($f.Name)*")
+    }
+} else {
+    Check "install folder emptied" $true
+}
 
 Write-Host "== logs"
 $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"

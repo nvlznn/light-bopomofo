@@ -25,7 +25,7 @@ mod imp {
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
     };
-    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, LoadLibraryW};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         GetKeyState, SendInput, SetFocus, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
         KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL,
@@ -36,8 +36,8 @@ mod imp {
         TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE, TF_IPPMF_FORPROCESS, TF_PROFILETYPE_INPUTPROCESSOR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DispatchMessageW, GetWindowTextW, PeekMessageW, SendMessageW,
-        SetForegroundWindow, ShowWindow, TranslateMessage, MSG, PM_REMOVE, SW_SHOW,
+        CreateWindowExW, DestroyWindow, DispatchMessageW, GetWindowTextW, PeekMessageW,
+        SendMessageW, SetForegroundWindow, ShowWindow, TranslateMessage, MSG, PM_REMOVE, SW_SHOW,
         WINDOW_EX_STYLE, WINDOW_STYLE, WM_SETTEXT, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
     };
     use windows_core::{w, GUID};
@@ -59,7 +59,12 @@ mod imp {
         Key(VIRTUAL_KEY, Mod),
         /// Shift pressed and released alone (中/英 switch).
         ShiftTap,
+        /// The document's text (committed text, plus any composition in
+        /// TSF-aware controls).
         Expect(&'static str),
+        /// The composition itself visible in the document: checked only in
+        /// TSF-aware controls (a plain Edit shows it in a separate window).
+        ExpectInline(&'static str),
         ExpectPrefix(&'static str),
         Save,
         ExpectSaved,
@@ -164,7 +169,12 @@ mod imp {
         vec![
             (
                 "ㄋㄏㄇ shows inline, Space → 你好嗎",
-                vec![Type("sca"), Expect("ㄋㄏㄇ"), space(), Expect("你好嗎")],
+                vec![
+                    Type("sca"),
+                    ExpectInline("ㄋㄏㄇ"),
+                    space(),
+                    Expect("你好嗎"),
+                ],
             ),
             (
                 "whole conversion ㄍㄗㄈㄈ → 工作方法",
@@ -179,7 +189,7 @@ mod imp {
                     right(),
                     right(),
                     space(),
-                    Expect("工作ㄈㄈ"),
+                    ExpectInline("工作ㄈㄈ"),
                     space(),
                     Expect("工作方法"),
                 ],
@@ -205,7 +215,7 @@ mod imp {
                 vec![
                     Type("sca"),
                     Key(VK_BACK, Mod::None),
-                    Expect("ㄋㄏ"),
+                    ExpectInline("ㄋㄏ"),
                     Key(VK_BACK, Mod::None),
                     Key(VK_BACK, Mod::None),
                     Expect(""),
@@ -297,20 +307,12 @@ mod imp {
         ok
     }
 
-    pub fn run() -> i32 {
-        let args: Vec<String> = std::env::args().collect();
-        let hold = (args.get(1).map(String::as_str) == Some("--hold")).then(|| {
-            args.get(2)
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(60)
-        });
-
+    fn open_window(class: windows_core::PCWSTR) -> Option<HWND> {
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             let instance = GetModuleHandleW(None).unwrap_or_default();
-            let Ok(edit) = CreateWindowExW(
+            let edit = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
-                w!("EDIT"),
+                class,
                 w!(""),
                 WINDOW_STYLE(WS_OVERLAPPEDWINDOW.0 | WS_VISIBLE.0),
                 100,
@@ -321,82 +323,132 @@ mod imp {
                 None,
                 Some(instance.into()),
                 None,
-            ) else {
-                println!("FAIL create window");
-                return 1;
-            };
+            )
+            .ok()?;
             let _ = ShowWindow(edit, SW_SHOW);
             let foreground = SetForegroundWindow(edit).as_bool();
             let _ = SetFocus(Some(edit));
-            println!(
-                "{} foreground window",
-                if foreground { "PASS" } else { "NOTE not" }
-            );
-            pump(500);
-            if caps_on() {
-                press(VK_CAPITAL, Mod::None); // start from a known state
+            if !foreground {
+                println!("NOTE window not in the foreground");
             }
+            pump(500);
+            Some(edit)
+        }
+    }
 
-            let mut failed = 0;
-            match activate() {
-                Ok(()) => println!("PASS activate 輕注音"),
-                Err(e) => {
-                    println!("FAIL activate 輕注音: {e}");
-                    failed += 1;
+    /// Run every scenario in `edit`; returns the number that failed.
+    fn run_scenarios(label: &str, edit: HWND, inline: bool) -> i32 {
+        let mut failed = 0;
+        let mut saved = String::new();
+        for (name, steps) in scenarios() {
+            let name = format!("[{label}] {name}");
+            clear(edit);
+            let mut ok = true;
+            for step in steps {
+                ok = match step {
+                    Type(keys) => {
+                        type_keys(keys);
+                        true
+                    }
+                    Key(vk, m) => {
+                        press(vk, m);
+                        true
+                    }
+                    ShiftTap => {
+                        send(&[input(VK_SHIFT, false), input(VK_SHIFT, true)]);
+                        true
+                    }
+                    Save => {
+                        saved = text(edit);
+                        true
+                    }
+                    Expect(want) => check(&name, edit, want, false),
+                    ExpectInline(want) => !inline || check(&name, edit, want, false),
+                    ExpectPrefix(want) => check(&name, edit, want, true),
+                    ExpectSaved => !saved.is_empty() && check(&name, edit, &saved.clone(), false),
+                };
+                if !ok {
+                    break;
                 }
             }
-            pump(800);
-
-            if let Some(seconds) = hold {
-                println!("holding the input method for {seconds} s");
-                pump(seconds * 1000);
-                return failed;
+            // Leave nothing composing and Caps Lock off for the next one.
+            press(VK_ESCAPE, Mod::None);
+            if caps_on() {
+                press(VK_CAPITAL, Mod::None);
             }
+            if ok {
+                println!("PASS {name}");
+            } else {
+                failed += 1;
+            }
+        }
+        failed
+    }
 
-            let mut saved = String::new();
-            for (name, steps) in scenarios() {
-                clear(edit);
-                let mut ok = true;
-                for step in steps {
-                    ok = match step {
-                        Type(keys) => {
-                            type_keys(keys);
-                            true
-                        }
-                        Key(vk, m) => {
-                            press(vk, m);
-                            true
-                        }
-                        ShiftTap => {
-                            send(&[input(VK_SHIFT, false), input(VK_SHIFT, true)]);
-                            true
-                        }
-                        Save => {
-                            saved = text(edit);
-                            true
-                        }
-                        Expect(want) => check(name, edit, want, false),
-                        ExpectPrefix(want) => check(name, edit, want, true),
-                        ExpectSaved => {
-                            !saved.is_empty() && check(name, edit, &saved.clone(), false)
-                        }
-                    };
-                    if !ok {
-                        break;
+    pub fn run() -> i32 {
+        let args: Vec<String> = std::env::args().collect();
+        let hold = (args.get(1).map(String::as_str) == Some("--hold")).then(|| {
+            args.get(2)
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(60)
+        });
+
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let _ = LoadLibraryW(w!("Msftedit.dll")); // RICHEDIT50W
+        }
+        if caps_on() {
+            press(VK_CAPITAL, Mod::None); // start from a known state
+        }
+        // A TSF-aware control (like Word or a browser: the composition is in
+        // the document) and a plain Edit (older apps: Windows shows the
+        // composition in its own window, only committed text reaches it).
+        let controls = [
+            ("RichEdit, TSF-aware", w!("RICHEDIT50W"), true),
+            ("Edit, no TSF", w!("EDIT"), false),
+        ];
+        let mut failed = 0;
+        let mut activated = false;
+        for (label, class, inline) in controls {
+            let Some(edit) = open_window(class) else {
+                println!("FAIL [{label}] create window");
+                failed += 1;
+                continue;
+            };
+            if inline {
+                const EM_SETEDITSTYLE: u32 = 0x0400 + 204;
+                const SES_USECTF: usize = 0x0001_0000;
+                unsafe {
+                    SendMessageW(
+                        edit,
+                        EM_SETEDITSTYLE,
+                        Some(WPARAM(SES_USECTF)),
+                        Some(LPARAM(SES_USECTF as isize)),
+                    );
+                }
+            }
+            if !activated {
+                activated = true;
+                match activate() {
+                    Ok(()) => println!("PASS activate 輕注音"),
+                    Err(e) => {
+                        println!("FAIL activate 輕注音: {e}");
+                        return failed + 1;
                     }
                 }
-                // Leave nothing composing and Caps Lock off for the next one.
-                press(VK_ESCAPE, Mod::None);
-                if caps_on() {
-                    press(VK_CAPITAL, Mod::None);
-                }
-                if ok {
-                    println!("PASS {name}");
-                } else {
-                    failed += 1;
+                pump(800);
+                if let Some(seconds) = hold {
+                    println!("holding the input method for {seconds} s");
+                    pump(seconds * 1000);
+                    return failed;
                 }
             }
-            failed
+            failed += run_scenarios(label, edit, inline);
+            unsafe {
+                let _ = DestroyWindow(edit);
+            }
+            pump(300);
         }
+        failed
     }
 }
