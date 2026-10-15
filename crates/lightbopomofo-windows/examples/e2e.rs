@@ -32,15 +32,17 @@ mod imp {
         VK_ESCAPE, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE,
     };
     use windows::Win32::UI::TextServices::{
-        CLSID_TF_InputProcessorProfiles, ITfInputProcessorProfileMgr,
-        TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE, TF_IPPMF_FORPROCESS, TF_PROFILETYPE_INPUTPROCESSOR,
+        CLSID_TF_InputProcessorProfiles, CLSID_TF_ThreadMgr, ITfInputProcessorProfileMgr,
+        ITfKeystrokeMgr, ITfThreadMgr, TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE, TF_IPPMF_FORPROCESS,
+        TF_PROFILETYPE_INPUTPROCESSOR,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, DispatchMessageW, GetWindowTextW, PeekMessageW,
         SendMessageW, SetForegroundWindow, ShowWindow, TranslateMessage, MSG, PM_REMOVE, SW_SHOW,
-        WINDOW_EX_STYLE, WINDOW_STYLE, WM_SETTEXT, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+        WINDOW_EX_STYLE, WINDOW_STYLE, WM_KEYDOWN, WM_KEYUP, WM_SETTEXT, WS_OVERLAPPEDWINDOW,
+        WS_VISIBLE,
     };
-    use windows_core::{w, GUID};
+    use windows_core::{w, Interface, GUID};
 
     // Must match src/globals.rs.
     const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x0d5e0d6e_3056_4888_9151_8701b588ad0c);
@@ -71,17 +73,67 @@ mod imp {
     }
     use Step::*;
 
+    thread_local! {
+        /// Set once this thread runs TSF itself, as TSF-aware applications
+        /// (Word, browsers) do: their message loop hands keys to TSF first.
+        static KEYSTROKES: std::cell::RefCell<Option<ITfKeystrokeMgr>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
+    /// Whether TSF took the key (so it must not reach the control).
+    fn tsf_takes(msg: &MSG) -> bool {
+        KEYSTROKES.with(|k| {
+            let Some(keys) = k.borrow().clone() else {
+                return false;
+            };
+            unsafe {
+                match msg.message {
+                    WM_KEYDOWN => {
+                        keys.TestKeyDown(msg.wParam, msg.lParam)
+                            .is_ok_and(|e| e.as_bool())
+                            && keys
+                                .KeyDown(msg.wParam, msg.lParam)
+                                .is_ok_and(|e| e.as_bool())
+                    }
+                    WM_KEYUP => {
+                        keys.TestKeyUp(msg.wParam, msg.lParam)
+                            .is_ok_and(|e| e.as_bool())
+                            && keys
+                                .KeyUp(msg.wParam, msg.lParam)
+                                .is_ok_and(|e| e.as_bool())
+                    }
+                    _ => false,
+                }
+            }
+        })
+    }
+
     fn pump(ms: u64) {
         let until = Instant::now() + Duration::from_millis(ms);
         let mut msg = MSG::default();
         while Instant::now() < until {
             unsafe {
                 while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    if tsf_takes(&msg) {
+                        continue;
+                    }
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
             }
             std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Run TSF on this thread like a TSF-aware application.
+    fn become_tsf_aware() -> windows_core::Result<ITfThreadMgr> {
+        unsafe {
+            let thread_mgr: ITfThreadMgr =
+                CoCreateInstance(&CLSID_TF_ThreadMgr, None, CLSCTX_INPROC_SERVER)?;
+            thread_mgr.Activate()?;
+            let keys: ITfKeystrokeMgr = thread_mgr.cast()?;
+            KEYSTROKES.with(|k| *k.borrow_mut() = Some(keys));
+            Ok(thread_mgr)
         }
     }
 
@@ -404,9 +456,11 @@ mod imp {
         // the document) and a plain Edit (older apps: Windows shows the
         // composition in its own window, only committed text reaches it).
         let controls = [
-            ("RichEdit, TSF-aware", w!("RICHEDIT50W"), true),
             ("Edit, no TSF", w!("EDIT"), false),
+            ("RichEdit, TSF-aware", w!("RICHEDIT50W"), true),
         ];
+        // Kept alive while the TSF-aware control is tested.
+        let mut _keep_tsf_alive = None;
         let mut failed = 0;
         let mut activated = false;
         for (label, class, inline) in controls {
@@ -416,6 +470,10 @@ mod imp {
                 continue;
             };
             if inline {
+                match become_tsf_aware() {
+                    Ok(t) => _keep_tsf_alive = Some(t),
+                    Err(e) => println!("NOTE could not run TSF on this thread: {e}"),
+                }
                 const EM_SETEDITSTYLE: u32 = 0x0400 + 204;
                 const SES_USECTF: usize = 0x0001_0000;
                 unsafe {
