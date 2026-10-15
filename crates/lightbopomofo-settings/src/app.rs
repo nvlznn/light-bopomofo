@@ -16,7 +16,8 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress, LoadLibraryW};
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CLASSES_ROOT, KEY_READ,
+    RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CLASSES_ROOT,
+    HKEY_CURRENT_USER, KEY_READ,
 };
 use windows::Win32::UI::Controls::{
     InitCommonControlsEx, ICC_LISTVIEW_CLASSES, ICC_STANDARD_CLASSES, INITCOMMONCONTROLSEX,
@@ -46,7 +47,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE, WS_OVERLAPPEDWINDOW, WS_TABSTOP,
     WS_VISIBLE, WS_VSCROLL,
 };
-use windows_core::{s, w, BOOL, GUID, PCWSTR};
+use windows_core::{s, w, BOOL, GUID, PCWSTR, PWSTR};
 
 // Must match crates/lightbopomofo-windows/src/globals.rs.
 const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x0d5e0d6e_3056_4888_9151_8701b588ad0c);
@@ -113,10 +114,74 @@ fn enabled() -> bool {
     }
 }
 
+/// The `0404:{CLSID}{PROFILE}` name Windows uses for this input method.
+fn tip_spec() -> String {
+    format!(
+        "{LANGID_ZH_TW:04X}:{{{:?}}}{{{:?}}}",
+        CLSID_TEXT_SERVICE, GUID_PROFILE
+    )
+}
+
+/// Whether 輕注音 is in the user's input methods: Windows 10/11 keep that
+/// list per language under HKCU\Control Panel\International\User Profile,
+/// as `0404:{CLSID}{PROFILE}` values. `None` when that key doesn't exist.
+fn in_user_list() -> Option<bool> {
+    let value = wide(&tip_spec());
+    let mut root = HKEY::default();
+    unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Control Panel\\International\\User Profile"),
+            None,
+            KEY_READ,
+            &mut root,
+        )
+        .ok()
+        .ok()?;
+    }
+    let mut found = false;
+    for index in 0.. {
+        let mut name = [0u16; 256];
+        let mut len = name.len() as u32;
+        let more = unsafe {
+            RegEnumKeyExW(
+                root,
+                index,
+                Some(PWSTR(name.as_mut_ptr())),
+                &mut len,
+                None,
+                None,
+                None,
+                None,
+            )
+        };
+        if more.is_err() {
+            break;
+        }
+        let mut language = name[..len as usize].to_vec();
+        language.push(0);
+        let mut key = HKEY::default();
+        unsafe {
+            if RegOpenKeyExW(root, PCWSTR(language.as_ptr()), None, KEY_READ, &mut key).is_ok() {
+                found =
+                    RegQueryValueExW(key, PCWSTR(value.as_ptr()), None, None, None, None).is_ok();
+                let _ = RegCloseKey(key);
+            }
+        }
+        if found {
+            break;
+        }
+    }
+    unsafe {
+        let _ = RegCloseKey(root);
+    }
+    Some(found)
+}
+
 fn status() -> Status {
     if !registered() {
         Status::NotInstalled
-    } else if enabled() {
+    } else if in_user_list().unwrap_or_else(enabled) {
         Status::Ready
     } else {
         Status::NotEnabled
@@ -135,10 +200,7 @@ fn install_layout_or_tip(enable: bool) -> bool {
             return false;
         };
         let install: unsafe extern "system" fn(PCWSTR, u32) -> BOOL = std::mem::transmute(function);
-        let spec = wide(&format!(
-            "{LANGID_ZH_TW:04X}:{{{:?}}}{{{:?}}}",
-            CLSID_TEXT_SERVICE, GUID_PROFILE
-        ));
+        let spec = wide(&tip_spec());
         install(
             PCWSTR(spec.as_ptr()),
             if enable { 0 } else { ILOT_UNINSTALL },
