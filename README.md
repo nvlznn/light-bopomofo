@@ -7,7 +7,13 @@
 ㄍㄗㄈㄈ → 工作方法
 ```
 
-目前是 MVP 開發中，見 [docs/MVP.md](docs/MVP.md)。
+## 下載
+
+**macOS 13 以上（Apple Silicon 與 Intel）**：到 [lightbopomofo.noky.dev](https://lightbopomofo.noky.dev) 或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo.dmg`，把「輕注音」拖到「應用程式」並打開，它會自動安裝並啟用輸入法。接著在選單列的輸入法選單選「輕注音」。
+
+Windows 版開發中。
+
+完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。
 
 ## 開發
 
@@ -39,6 +45,19 @@ log stream --info --predicate 'subsystem == "dev.noky.inputmethod.lightbopomofo"
 ```
 
 使用者紀錄存在 `~/Library/Application Support/LightBopomofo/history.tsv`，只在本機；App 刪除紀錄後會通知輸入法重新載入。
+
+## 發布新版（macOS）
+
+1. 改 `macos/App/Info.plist` 的 `CFBundleShortVersionString`（輸入法會自動跟著）與 `CFBundleVersion`，更新 `macos/RELEASE_NOTES.md`。
+2. 在「終端機」App 執行 `macos/release.sh`（第一次要對鑰匙圈的詢問按「永遠允許」）。它會簽署、公證、staple，產生 `dist/LightBopomofo.dmg`。
+3. 用 git 建 tag 再建 Release（`gh` 沒有 `workflow` 權限時無法替含 CI 設定的 commit 建 tag）：
+   ```sh
+   git tag -a vX.Y.Z -m "輕注音 X.Y.Z" && git push origin vX.Y.Z
+   gh release create vX.Y.Z dist/LightBopomofo.dmg --verify-tag --title "輕注音 X.Y.Z" --notes-file macos/RELEASE_NOTES.md
+   ```
+   檔名固定為 `LightBopomofo.dmg`，官網的 `releases/latest/download/LightBopomofo.dmg` 連結就不用改。
+
+官網（`website/`）在 push 到 `main` 時由 Vercel 自動部署。
 
 ## 授權
 
