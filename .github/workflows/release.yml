@@ -31,7 +31,8 @@ jobs:
         shell: pwsh
         run: |
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-          if ("v$version" -ne $env:TAG) { throw "tag $env:TAG does not match Cargo.toml version $version" }
+          # Releases are numbered 1.0, 2.0, …; Cargo.toml needs three parts (1.0.0).
+          if ("v$version" -ne $env:TAG -and "v$version" -ne "$($env:TAG).0") { throw "tag $env:TAG does not match Cargo.toml version $version" }
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc

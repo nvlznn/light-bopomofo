@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File windows\build.ps1
 
 ## 發布新版（macOS）
 
-1. 改版本號：`macos/App/Info.plist` 的 `CFBundleShortVersionString`（輸入法會自動跟著）與 `CFBundleVersion`，以及 `Cargo.toml` 的 `version`（Windows 版用它）。更新 `macos/RELEASE_NOTES.md`。
+1. 改版本號：每次發佈升一個大版本（1.0 → 2.0 → 3.0）。`macos/App/Info.plist` 的 `CFBundleShortVersionString` 寫 `2.0`（輸入法會自動跟著，標籤就是 `v2.0`），`CFBundleVersion` 加 1；`Cargo.toml` 的 `version` 寫 `2.0.0`（Windows 版用它，Cargo 規定要三段）。更新 `macos/RELEASE_NOTES.md`。
 2. 在「終端機」App 執行 `macos/release.sh`（第一次要對鑰匙圈的詢問按「永遠允許」）。它會簽署、公證、staple，產生 `dist/LightBopomofo.dmg`。
 3. commit 並 push 後，在「終端機」執行 `macos/release.sh --publish`：它會用 git 建立並推送 tag（`gh` 沒有 `workflow` 權限時無法替含 CI 設定的 commit 建 tag），再建立 GitHub Release 並附上 dmg。
    檔名固定為 `LightBopomofo.dmg`，官網的 `releases/latest/download/LightBopomofo.dmg` 連結就不用改。
