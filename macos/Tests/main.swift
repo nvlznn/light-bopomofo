@@ -228,12 +228,14 @@ do {
     check(!Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Volumes/輕注音/LightBopomofo.app")), "disk image copy is the installer")
 }
 
-// The bopomofo itself is the ninth candidate (Shift+9).
+// The bopomofo itself opens the third page.
 do {
     let c = makeComposer()
     type(c, "ㄋㄏㄇ")
-    check(c.candidates.count > 9 && c.candidates[8].text == "ㄋㄏㄇ", "ㄋㄏㄇ is ninth: \(c.candidates.prefix(9).map(\.text))")
-    check(c.handle(.select(9)) == KeyResult(handled: true, commit: "ㄋㄏㄇ"), "shift+9 types ㄋㄏㄇ")
+    check(c.candidates.count > 18 && c.candidates[18].text == "ㄋㄏㄇ", "ㄋㄏㄇ is 19th: \(c.candidates.prefix(19).map(\.text))")
+    _ = c.handle(.pageNext)
+    _ = c.handle(.pageNext)
+    check(c.handle(.select(1)) == KeyResult(handled: true, commit: "ㄋㄏㄇ"), "page 3, shift+1 types ㄋㄏㄇ")
     check(c.composingText.isEmpty, "nothing left composing")
 }
 

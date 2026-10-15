@@ -7,17 +7,21 @@
 //! whole-input conversion; edges starting at position 0 give the
 //! prefix-only candidates.
 //!
-//! A slot cut short — the next symbol would continue it into a longer
-//! syllable, as ㄧ does after ㄋ — is heavily penalized, so a fully typed
-//! syllable stays one character (ㄋㄧˇ is 你, not 難以 from ㄋ|ㄧˇ).
+//! A slot cut short — the next symbols would continue it into a longer
+//! syllable, as ㄧˇ does after ㄋ — is heavily penalized when that longer
+//! syllable looks fully typed (it has a tone or three symbols), so it stays
+//! one character (ㄋㄧˇ is 你, not 難以 from ㄋ|ㄧˇ). A two-symbol syllable
+//! is as likely two abbreviated characters (ㄇㄧ in ㄕㄇㄧㄙ is 麼意 of
+//! 什麼意思 as much as 密 of 史密斯), so cutting it costs little.
 //!
 //! Candidates come in tiers, like the iPhone keyboard: the whole input
 //! (conversion and common words covering it all), common words covering a
 //! front part, common single characters for the first syllable, then
 //! everything else by score.
 //!
-//! The bopomofo itself is always a candidate, last on the first page, to
-//! type the symbols as they are; it is never learned.
+//! The bopomofo itself is always a candidate, first on the third page, to
+//! type the symbols as they are; it is never learned. No other candidate
+//! mixes characters with symbols a word couldn't explain.
 //!
 //! History: a word the user chose for exactly the same symbols wins its span
 //! (it is lifted just above the span's best word) without making the lattice
@@ -42,8 +46,12 @@ pub const SLOT_PARTIAL: f64 = -2.0;
 /// Extra for an incomplete slot that ends in a tone: a tone usually means the
 /// syllable is finished, so ㄧˋ should be 一 (ㄧˋ) before 頁 (ㄧㄝˋ).
 pub const SLOT_TONED_INCOMPLETE: f64 = -3.0;
-/// Slot ends where the next symbol would continue its syllable (ㄋ|ㄧ).
+/// Slot ends where the next symbols would continue it into a fully typed
+/// syllable: with a tone or three symbols (ㄋ|ㄧˇ, ㄊ|ㄧㄢ).
 pub const SLOT_CUT: f64 = -6.0;
+/// Slot ends where the next symbol would continue it into a two-symbol
+/// syllable (ㄇ|ㄧ): as likely abbreviated characters.
+pub const SLOT_CUT_SHORT: f64 = -1.0;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
 /// A learned word scores this much above the best word for the same symbols.
@@ -54,9 +62,9 @@ pub const HISTORY_WEIGHT: f64 = 1.0;
 pub const UNKNOWN_SYMBOL: f64 = -50.0;
 /// Upper bound on returned candidates.
 pub const MAX_CANDIDATES: usize = 100;
-/// Where the bopomofo itself goes: last on the first page of the candidate
+/// Where the bopomofo itself goes: first on the third page of the candidate
 /// window, or last when there are fewer candidates.
-pub const RAW_POSITION: usize = crate::composer::PAGE_SIZE - 1;
+pub const RAW_POSITION: usize = 2 * crate::composer::PAGE_SIZE;
 /// Tier limits: (score margin below the tier's best, maximum count).
 /// Whole-input words.
 pub const TIER_WHOLE: (f64, usize) = (3.0, 10);
@@ -275,9 +283,10 @@ impl Engine {
                 },
             );
         }
-        // The symbols as typed, last on the first page (Shift+9).
+        // The symbols as typed, first on the third page; no other candidate
+        // shows symbols.
         let raw: String = input.iter().collect();
-        candidates.retain(|c| c.text != raw);
+        candidates.retain(|c| !c.text.chars().any(crate::bopomofo::is_symbol));
         candidates.truncate(MAX_CANDIDATES - 1);
         let at = candidates.len().min(RAW_POSITION);
         candidates.insert(
@@ -388,10 +397,21 @@ impl Engine {
                 self.history
                     .learned(&input[start..pos].iter().collect::<String>())
             };
-            let cuts = slots
-                .iter()
-                .filter(|&&(a, b)| spans[a].last().is_some_and(|&end| end > b))
-                .count();
+            // Slots the following symbols would extend into a longer
+            // syllable: (fully typed ones, two-symbol ones).
+            let (cuts, short_cuts) =
+                slots
+                    .iter()
+                    .fold((0, 0), |(full, short), &(a, b)| match spans[a].last() {
+                        Some(&end) if end > b => {
+                            if end - a >= 3 || is_tone(input[end - 1]) {
+                                (full + 1, short)
+                            } else {
+                                (full, short + 1)
+                            }
+                        }
+                        _ => (full, short),
+                    });
             for id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
                     // Only look at the text when this span has learned choices.
@@ -408,7 +428,7 @@ impl Engine {
                         start,
                         end: pos,
                         entry: Some(id),
-                        score: score + SLOT_CUT * cuts as f64,
+                        score: score + SLOT_CUT * cuts as f64 + SLOT_CUT_SHORT * short_cuts as f64,
                         cut: cuts > 0,
                     };
                     emit(edge, used);

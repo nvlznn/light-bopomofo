@@ -249,15 +249,17 @@ fn switching_language_drops_the_composition() {
 }
 
 #[test]
-fn bopomofo_itself_is_ninth_and_not_learned() {
+fn bopomofo_itself_opens_the_third_page_and_is_not_learned() {
     let (mut e, mut c) = (engine(), Composer::new());
     typing(&mut c, &mut e, "ㄋㄏㄇ");
-    assert!(c.candidates().len() > PAGE_SIZE);
-    assert_eq!(c.candidates()[PAGE_SIZE - 1].text, "ㄋㄏㄇ");
+    assert!(c.candidates().len() > 2 * PAGE_SIZE);
+    assert_eq!(c.candidates()[2 * PAGE_SIZE].text, "ㄋㄏㄇ");
     let raw = c.candidates().iter().filter(|x| x.text == "ㄋㄏㄇ").count();
     assert_eq!(raw, 1);
-    // Shift+9 types the symbols; they are not learned.
-    assert_eq!(c.handle(&mut e, Key::Select(9)), handled("ㄋㄏㄇ"));
+    // Two pages on, Shift+1 types the symbols; they are not learned.
+    c.handle(&mut e, Key::PageNext);
+    c.handle(&mut e, Key::PageNext);
+    assert_eq!(c.handle(&mut e, Key::Select(1)), handled("ㄋㄏㄇ"));
     assert!(c.is_empty());
     assert!(e.history_entries().is_empty());
     typing(&mut c, &mut e, "ㄋㄏㄇ");
@@ -272,8 +274,30 @@ fn bopomofo_itself_is_last_when_there_are_few() {
         let at = candidates.iter().position(|x| x.text == input);
         assert_eq!(
             at,
-            Some((candidates.len() - 1).min(PAGE_SIZE - 1)),
+            Some((candidates.len() - 1).min(2 * PAGE_SIZE)),
             "{input}"
         );
+    }
+}
+
+#[test]
+fn only_the_bopomofo_candidate_shows_symbols() {
+    let e = engine();
+    for input in [
+        "ㄕㄇㄧㄙ",
+        "ㄋㄏㄇ",
+        "ㄉㄚ",
+        "ㄦㄦㄦㄦ",
+        "ㄖㄖㄖㄖㄖㄖㄖㄖ",
+        "ㄍㄗㄈㄈㄓㄓ",
+    ] {
+        let candidates = e.query_str(input);
+        let mixed: Vec<&str> = candidates
+            .iter()
+            .map(|c| c.text.as_str())
+            .filter(|t| *t != input && t.chars().any(lightbopomofo_core::bopomofo::is_symbol))
+            .collect();
+        assert!(mixed.is_empty(), "{input}: {mixed:?}");
+        assert!(candidates.iter().any(|c| c.text == input), "{input}");
     }
 }
