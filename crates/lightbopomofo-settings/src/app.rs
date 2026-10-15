@@ -853,9 +853,16 @@ fn create(hwnd: HWND) {
     });
 }
 
+// The handlers below run while a control talks to the window, sometimes
+// from inside another handler (with common controls 6, a button redrawing
+// itself sends WM_NOTIFY at once): they skip what arrives while the state
+// is in use instead of borrowing it twice, which would end the app.
+
 fn command(id: i32, code: u32) {
     UI.with(|cell| {
-        let mut ui = cell.borrow_mut();
+        let Ok(mut ui) = cell.try_borrow_mut() else {
+            return;
+        };
         match (id, code) {
             (ID_PRIMARY, BN_CLICKED) => match ui.primary_action {
                 Primary::Enable => {
@@ -893,7 +900,9 @@ fn notify(header: *const NMHDR) {
     }
     let code = unsafe { (*header).code };
     UI.with(|cell| {
-        let mut ui = cell.borrow_mut();
+        let Ok(mut ui) = cell.try_borrow_mut() else {
+            return;
+        };
         if unsafe { (*header).hwndFrom } != ui.list {
             return;
         }
@@ -984,7 +993,16 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             LRESULT(0)
         }
         WM_UPDATE => {
-            let keep = UI.with(|cell| update_events(&mut cell.borrow_mut()));
+            let keep = UI.with(|cell| match cell.try_borrow_mut() {
+                Ok(mut ui) => update_events(&mut ui),
+                Err(_) => {
+                    // Busy: hear the news on the next round.
+                    unsafe {
+                        let _ = PostMessageW(Some(hwnd), WM_UPDATE, WPARAM(0), LPARAM(0));
+                    }
+                    true
+                }
+            });
             if !keep {
                 unsafe {
                     let _ = DestroyWindow(hwnd);
@@ -1000,7 +1018,33 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
     }
 }
 
+/// A panic ends the app (it cannot unwind out of the window procedure):
+/// leave a line in %LOCALAPPDATA%\LightBopomofo\logs\app.log first.
+fn log_panics() {
+    std::panic::set_hook(Box::new(|info| {
+        let Some(dir) = std::env::var_os("LOCALAPPDATA") else {
+            return;
+        };
+        let dir = PathBuf::from(dir).join("LightBopomofo\\logs");
+        let _ = std::fs::create_dir_all(&dir);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("app.log"))
+        {
+            use std::io::Write;
+            let _ = writeln!(file, "{now} PANIC {VERSION_FULL} {info}");
+        }
+    }));
+}
+
+const VERSION_FULL: &str = env!("CARGO_PKG_VERSION");
+
 pub fn main() {
+    log_panics();
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("--check-update") => {

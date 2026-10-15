@@ -79,6 +79,8 @@ $shown = Start-Process "$dir\LightBopomofo.exe" -PassThru
 Start-Sleep -Seconds 6
 $shown.Refresh()
 Check "app stays open" (-not $shown.HasExited) "(exit $(if ($shown.HasExited) { $shown.ExitCode }))"
+$appLog = "$env:LOCALAPPDATA\LightBopomofo\logs\app.log"
+if (Test-Path $appLog) { Get-Content $appLog -Tail 10 | ForEach-Object { Write-Host "  app.log: $_" } }
 Stop-Process -Id $shown.Id -Force -ErrorAction SilentlyContinue
 Remove-Item Env:\LIGHTBOPOMOFO_PRETEND_LATEST
 # The scheduled task runs the check as the signed-in user.
