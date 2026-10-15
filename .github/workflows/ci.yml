@@ -31,3 +31,20 @@ jobs:
         run: macos/test.sh
       - name: Universal build and unsigned disk image
         run: macos/build.sh && macos/package-dmg.sh
+
+  windows-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
+      - name: Build input method, app and installer
+        shell: pwsh
+        run: windows/build.ps1
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LightBopomofo-Setup
+          path: dist/LightBopomofo-Setup.exe
+          if-no-files-found: error

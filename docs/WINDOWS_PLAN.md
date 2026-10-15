@@ -106,6 +106,19 @@ windows/
 
 在 Mac 上我也能用 `cargo-xwin` 交叉編譯 Windows DLL 做快速檢查，但真正的驗證以 CI 與 Ino 的電腦為準。
 
+## 目前進度
+
+| | 狀態 |
+|---|---|
+| W0 引擎準備 | ✅ 完成（二進位詞庫、Rust Composer、多程式共用紀錄），macOS 也已改用 |
+| W1+W2 輸入法 DLL | 程式碼完成，x64／x86／ARM64 都能編譯；**尚未在 Windows 上實測** |
+| W3 安裝程式與 CI | `windows/installer.iss`、`windows/build.ps1`；CI 的 `windows-package` 產生安裝檔 |
+| W4 設定 App | 程式碼完成、能編譯；**尚未在 Windows 上實測** |
+| W5 相容性測試 | 等 Ino 在 Windows 上試用 |
+| W6 發布 | W5 通過後 |
+
+**已知限制（第一版）**：ARM64 電腦上，x64 程式（以模擬方式執行）和 ARM64 程式共用同一份 64 位元 COM 註冊，只能指向一個 DLL；第一版註冊 ARM64 版，所以 ARM 電腦上模擬執行的 x64 程式暫時無法使用輕注音（ARM64 原生程式與 32 位元程式可以）。要同時支援需改用 ARM64X 二進位，之後再評估。
+
 ## 里程碑
 
 | | 內容 | 在哪裡驗證 | 預估 |

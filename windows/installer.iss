@@ -1,0 +1,143 @@
+; 輕注音 for Windows — Inno Setup script.
+; Built by windows/build.ps1 (locally) or CI from a staging folder:
+;   stage\x64\lightbopomofo.dll    stage\x86\lightbopomofo.dll    stage\arm64\lightbopomofo.dll
+;   stage\x64\LightBopomofo.exe    stage\arm64\LightBopomofo.exe
+;   stage\lexicon.bin  stage\lightbopomofo.ico  stage\licenses\*
+; iscc /DAppVersion=0.1.0 /DStage=path\to\stage /DOutput=path\to\dist installer.iss
+
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
+#ifndef Stage
+  #define Stage "..\target\windows-stage"
+#endif
+#ifndef Output
+  #define Output "..\dist"
+#endif
+
+[Setup]
+AppId={{6F1B3C7A-2E54-4C1B-9B0D-7C3A5E1F2B90}
+AppName=輕注音
+AppVerName=輕注音 {#AppVersion}
+AppVersion={#AppVersion}
+AppPublisher=Ino Chueh
+AppPublisherURL=https://lightbopomofo.noky.dev
+AppSupportURL=https://github.com/nvlznn/light-bopomofo/issues
+DefaultDirName={autopf}\LightBopomofo
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible arm64
+ArchitecturesInstallIn64BitMode=x64compatible arm64
+MinVersion=10.0
+OutputDir={#Output}
+OutputBaseFilename=LightBopomofo-Setup
+SetupIconFile={#Stage}\lightbopomofo.ico
+UninstallDisplayIcon={app}\LightBopomofo.exe
+UninstallDisplayName=輕注音
+WizardStyle=modern
+Compression=lzma2/max
+SolidCompression=yes
+CloseApplications=no
+
+[Languages]
+#if FileExists(AddBackslash(SourcePath) + "ChineseTraditional.isl")
+Name: "zh"; MessagesFile: "ChineseTraditional.isl"
+#else
+Name: "en"; MessagesFile: "compiler:Default.isl"
+#endif
+
+[Files]
+; Shared data. lexicon.bin is compiled from the chewing tsi.csv shipped in licenses\.
+Source: "{#Stage}\lexicon.bin"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Stage}\lightbopomofo.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Stage}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
+; The input method, one DLL per architecture of the applications that load it.
+; On Arm64, x64 applications (emulated) share the 64-bit registration with
+; Arm64 ones, so only the Arm64 DLL is registered there.
+Source: "{#Stage}\x64\lightbopomofo.dll"; DestDir: "{app}\x64"; Flags: ignoreversion; Check: IsX64OS
+Source: "{#Stage}\arm64\lightbopomofo.dll"; DestDir: "{app}\arm64"; Flags: ignoreversion; Check: IsArm64
+Source: "{#Stage}\x86\lightbopomofo.dll"; DestDir: "{app}\x86"; Flags: ignoreversion
+; The app.
+Source: "{#Stage}\x64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsX64OS
+Source: "{#Stage}\arm64\LightBopomofo.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsArm64
+
+[Icons]
+Name: "{autoprograms}\輕注音"; Filename: "{app}\LightBopomofo.exe"
+
+[Run]
+Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\x64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsX64OS
+Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\arm64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsArm64
+Filename: "{syswow64}\regsvr32.exe"; Parameters: "/s ""{app}\x86\lightbopomofo.dll"""; Flags: runhidden waituntilterminated
+; Add 輕注音 to the input methods of the user who ran the installer.
+Filename: "{app}\LightBopomofo.exe"; Parameters: "--enable"; Flags: runasoriginaluser runhidden waituntilterminated
+Filename: "{app}\LightBopomofo.exe"; Description: "開啟輕注音"; Flags: postinstall nowait skipifsilent runasoriginaluser
+
+[UninstallRun]
+Filename: "{app}\LightBopomofo.exe"; Parameters: "--disable"; Flags: runhidden waituntilterminated; RunOnceId: "disable"
+Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\x64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsX64OS; RunOnceId: "unreg64"
+Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\arm64\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; Check: IsArm64; RunOnceId: "unregarm64"
+Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\x86\lightbopomofo.dll"""; Flags: runhidden waituntilterminated; RunOnceId: "unreg32"
+
+[UninstallDelete]
+; DLLs moved aside by updates (see below).
+Type: files; Name: "{app}\x64\*.old"
+Type: files; Name: "{app}\x86\*.old"
+Type: files; Name: "{app}\arm64\*.old"
+
+[Code]
+{ A loaded DLL cannot be overwritten, but it can be renamed. Every running
+  application that types has the input method loaded, so before copying the
+  new files, move the old DLLs aside: running applications keep using the
+  old copy, new ones load the new one, and nobody has to restart. Copies
+  left from earlier updates are deleted when no longer in use. }
+procedure MoveAside(const Dir: String);
+var
+  Dll, Old: String;
+  N: Integer;
+begin
+  Dll := Dir + '\lightbopomofo.dll';
+  if not FileExists(Dll) then
+    Exit;
+  N := 0;
+  repeat
+    Old := Dir + '\lightbopomofo.' + IntToStr(N) + '.old';
+    if FileExists(Old) then
+      DeleteFile(Old);
+    N := N + 1;
+  until (not FileExists(Old)) or (N > 50);
+  if not RenameFile(Dll, Old) then
+    Log('Could not move ' + Dll + ' aside');
+end;
+
+procedure CleanOld(const Dir: String);
+var
+  FindRec: TFindRec;
+begin
+  if FindFirst(Dir + '\*.old', FindRec) then
+  begin
+    try
+      repeat
+        DeleteFile(Dir + '\' + FindRec.Name);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    MoveAside(ExpandConstant('{app}\x64'));
+    MoveAside(ExpandConstant('{app}\x86'));
+    MoveAside(ExpandConstant('{app}\arm64'));
+  end;
+  if CurStep = ssPostInstall then
+  begin
+    CleanOld(ExpandConstant('{app}\x64'));
+    CleanOld(ExpandConstant('{app}\x86'));
+    CleanOld(ExpandConstant('{app}\arm64'));
+  end;
+end;
