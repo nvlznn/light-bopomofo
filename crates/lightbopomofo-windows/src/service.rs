@@ -14,18 +14,20 @@ use windows::Win32::UI::TextServices::{
     ITfCompartmentEventSink_Impl, ITfCompartmentMgr, ITfComposition, ITfCompositionSink,
     ITfCompositionSink_Impl, ITfContext, ITfDisplayAttributeInfo, ITfDisplayAttributeProvider,
     ITfDisplayAttributeProvider_Impl, ITfDocumentMgr, ITfKeyEventSink, ITfKeyEventSink_Impl,
-    ITfKeystrokeMgr, ITfSource, ITfTextInputProcessor, ITfTextInputProcessorEx,
-    ITfTextInputProcessorEx_Impl, ITfTextInputProcessor_Impl, ITfThreadMgr, ITfThreadMgrEventSink,
-    ITfThreadMgrEventSink_Impl, GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION,
-    GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, TF_CONVERSIONMODE_NATIVE,
+    ITfKeystrokeMgr, ITfLangBarItemButton, ITfLangBarItemMgr, ITfSource, ITfTextInputProcessor,
+    ITfTextInputProcessorEx, ITfTextInputProcessorEx_Impl, ITfTextInputProcessor_Impl,
+    ITfThreadMgr, ITfThreadMgrEventSink, ITfThreadMgrEventSink_Impl,
+    GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, GUID_COMPARTMENT_KEYBOARD_OPENCLOSE,
+    TF_CONVERSIONMODE_NATIVE,
 };
-use windows_core::{implement, IUnknownImpl, Interface, Ref, Result, BOOL, GUID};
+use windows_core::{implement, ComObject, IUnknownImpl, Interface, Ref, Result, BOOL, GUID};
 
 use crate::candidates;
 use crate::display::{Attributes, InputAttribute};
 use crate::edit::{self, Composition};
 use crate::globals::{self, guard, GUID_DISPLAY_ATTRIBUTE_INPUT};
 use crate::keys::{self, vk, Modifiers, ShiftTap};
+use crate::langbar::InputModeButton;
 use crate::log;
 
 #[implement(
@@ -47,6 +49,8 @@ pub struct TextService {
     /// Chinese mode (false: everything goes to the application).
     chinese: Cell<bool>,
     shift: RefCell<ShiftTap>,
+    /// The 輕 icon on the taskbar, while active.
+    mode_button: RefCell<Option<ComObject<InputModeButton>>>,
 }
 
 impl TextService {
@@ -62,6 +66,7 @@ impl TextService {
             composition: Composition::default(),
             chinese: Cell::new(true),
             shift: RefCell::new(ShiftTap::default()),
+            mode_button: RefCell::new(None),
         }
     }
 }
@@ -224,6 +229,28 @@ impl TextService_Impl {
         }
     }
 
+    /// Redraw the taskbar icon if the taskbar theme changed.
+    fn refresh_mode_button(&self) {
+        let button = self.mode_button.borrow().clone();
+        if let Some(button) = button {
+            button.refresh();
+        }
+    }
+
+    fn add_mode_button(&self, thread_mgr: &ITfThreadMgr, client: u32) {
+        let button = ComObject::new(InputModeButton::new(thread_mgr.clone(), client));
+        let item: ITfLangBarItemButton = button.to_interface();
+        let added = unsafe {
+            thread_mgr
+                .cast::<ITfLangBarItemMgr>()
+                .and_then(|items| items.AddItem(&item))
+        };
+        match added {
+            Ok(()) => *self.mode_button.borrow_mut() = Some(button),
+            Err(e) => log::error(&format!("taskbar icon not added: {e}")),
+        }
+    }
+
     fn activate(&self, thread_mgr: &ITfThreadMgr, client: u32) -> Result<()> {
         *self.thread_mgr.borrow_mut() = Some(thread_mgr.clone());
         self.client.set(client);
@@ -264,6 +291,7 @@ impl TextService_Impl {
         }
         self.chinese.set(true);
         self.publish_mode();
+        self.add_mode_button(thread_mgr, client);
         // Load the lexicon now rather than on the first key.
         let loaded = globals::engine().is_some();
         log::info(&format!(
@@ -281,6 +309,12 @@ impl TextService_Impl {
         self.composition.forget();
         if let Some(thread_mgr) = self.thread_mgr.borrow_mut().take() {
             unsafe {
+                if let (Ok(items), Some(button)) = (
+                    thread_mgr.cast::<ITfLangBarItemMgr>(),
+                    self.mode_button.borrow_mut().take(),
+                ) {
+                    let _ = items.RemoveItem(&button.to_interface::<ITfLangBarItemButton>());
+                }
                 if let Ok(keystrokes) = thread_mgr.cast::<ITfKeystrokeMgr>() {
                     let _ = keystrokes.UnadviseKeyEventSink(self.client.get());
                 }
@@ -335,7 +369,12 @@ impl ITfTextInputProcessorEx_Impl for TextService_Impl {
 impl ITfKeyEventSink_Impl for TextService_Impl {
     fn OnSetFocus(&self, foreground: BOOL) -> Result<()> {
         log::debug(|| format!("key foreground: {}", foreground.as_bool()));
-        Ok(())
+        guard("Key::OnSetFocus", Ok(()), || {
+            if foreground.as_bool() {
+                self.refresh_mode_button();
+            }
+            Ok(())
+        })
     }
 
     fn OnTestKeyDown(
@@ -408,6 +447,7 @@ impl ITfThreadMgrEventSink_Impl for TextService_Impl {
         guard("ThreadMgr::OnSetFocus", Ok(()), || {
             // The old document ends its composition (OnCompositionTerminated).
             candidates::hide();
+            self.refresh_mode_button();
             Ok(())
         })
     }

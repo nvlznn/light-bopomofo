@@ -16,6 +16,8 @@ mod edit;
 #[cfg(windows)]
 mod globals;
 #[cfg(windows)]
+mod langbar;
+#[cfg(windows)]
 mod log;
 #[cfg(windows)]
 mod register;

@@ -42,7 +42,7 @@ foreach ($arch in $targets.Keys) {
     }
 }
 
-Copy-Item windows\lightbopomofo.ico, windows\lightbopomofo-input.ico $stage\
+Copy-Item windows\lightbopomofo.ico, windows\lightbopomofo-input.ico, windows\lightbopomofo-input-light.ico $stage\
 Copy-Item LICENSE "$stage\licenses\LICENSE.txt"
 Copy-Item DATA_LICENSES.md, licenses\LGPL-2.1.txt, data\tsi.csv, crates\lightbopomofo-core\lexicon-adjustments.csv "$stage\licenses\"
 

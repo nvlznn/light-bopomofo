@@ -9,7 +9,8 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use lightbopomofo_core::{Engine, History, Lexicon};
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
-use windows_core::GUID;
+use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+use windows_core::{w, GUID, PCWSTR};
 
 use crate::log;
 
@@ -68,6 +69,26 @@ pub fn install_dir() -> Option<PathBuf> {
 /// `%APPDATA%\LightBopomofo` (roaming: history follows the user).
 pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("LightBopomofo"))
+}
+
+/// A DWORD from the user's personalization settings, e.g. `AppsUseLightTheme`
+/// (app windows) or `SystemUsesLightTheme` (taskbar). `None` when unset.
+pub fn personalize_flag(name: PCWSTR) -> Option<u32> {
+    let mut value = 0u32;
+    let mut size = 4u32;
+    unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            name,
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut u32 as *mut _),
+            Some(&mut size),
+        )
+    }
+    .is_ok()
+    .then_some(value)
 }
 
 /// The engine, shared by every input context in this process; loaded on

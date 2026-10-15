@@ -6,8 +6,10 @@
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
 //       the same, as a Windows icon (16–256 px)
 //   swift scripts/make-icon.swift input-ico windows/lightbopomofo-input.ico
-//       Windows taskbar input indicator: white glyph on transparent, sized
-//       like the macOS input-source icon (Windows doesn't recolour it)
+//   swift scripts/make-icon.swift input-ico-light windows/lightbopomofo-input-light.ico
+//       Windows taskbar input indicator: white (dark taskbar) or black
+//       (light taskbar) glyph on transparent, sized like the macOS
+//       input-source icon; the input method picks one by the taskbar theme
 import AppKit
 
 func bitmap(_ px: Int, points: CGFloat, draw: () -> Void) -> NSBitmapImageRep {
@@ -84,10 +86,12 @@ func appIcon(_ out: String) {
     iconutil.waitUntilExit()
 }
 
-/// The taskbar icon at `px` pixels: white glyph filling the box, no background.
-func inputIconRep(_ px: Int) -> NSBitmapImageRep {
-    bitmap(px, points: 16) {
-        glyph(size: 14.5, color: .white, in: 16, weight: .medium, dy: 0.5)
+/// The taskbar icon at `px` pixels: the glyph filling the box, no background.
+func inputIconRep(_ color: NSColor) -> (Int) -> NSBitmapImageRep {
+    { px in
+        bitmap(px, points: 16) {
+            glyph(size: 14.5, color: color, in: 16, weight: .medium, dy: 0.5)
+        }
     }
 }
 
@@ -115,6 +119,7 @@ switch CommandLine.arguments[1] {
 case "menu": menuIcon(CommandLine.arguments[2])
 case "app": appIcon(CommandLine.arguments[2])
 case "ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64, 256], rep: appIconRep)
-case "input-ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep)
-default: fatalError("usage: make-icon.swift menu|app|ico|input-ico OUTPUT")
+case "input-ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep(.white))
+case "input-ico-light": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep(.black))
+default: fatalError("usage: make-icon.swift menu|app|ico|input-ico|input-ico-light OUTPUT")
 }

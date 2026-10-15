@@ -53,7 +53,7 @@ foreach ($t in "x86_64-pc-windows-msvc", "i686-pc-windows-msvc") {
 Write-Host "== install"
 $code = Wait-Exit $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-install.log`"")
 Check "installer exit code" ($code -eq 0) "($code)"
-foreach ($f in "lexicon.bin", "LightBopomofo.exe", "lightbopomofo.ico", "lightbopomofo-input.ico", "x64\lightbopomofo.dll", "x86\lightbopomofo.dll", "licenses\tsi.csv", "licenses\LGPL-2.1.txt") {
+foreach ($f in "lexicon.bin", "LightBopomofo.exe", "lightbopomofo.ico", "lightbopomofo-input.ico", "lightbopomofo-input-light.ico", "x64\lightbopomofo.dll", "x86\lightbopomofo.dll", "licenses\tsi.csv", "licenses\LGPL-2.1.txt") {
     Check "installed $f" (Test-Path "$dir\$f")
 }
 Check "64-bit COM server" ((Server-Path "Registry64") -eq "$dir\x64\lightbopomofo.dll") "($(Server-Path 'Registry64'))"

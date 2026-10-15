@@ -15,11 +15,9 @@ use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreatePen, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC,
     GetMonitorInfoW, GetTextExtentPoint32W, InvalidateRect, MonitorFromRect, ReleaseDC, RoundRect,
     SelectObject, SetBkMode, SetTextColor, TextOutW, CLEARTYPE_QUALITY, DEFAULT_CHARSET, FW_MEDIUM,
-    FW_SEMIBOLD,
-    HDC, HFONT, HGDIOBJ, MONITORINFO, MONITOR_DEFAULTTONEAREST, OUT_DEFAULT_PRECIS, PAINTSTRUCT,
-    PS_SOLID, TRANSPARENT,
+    FW_SEMIBOLD, HDC, HFONT, HGDIOBJ, MONITORINFO, MONITOR_DEFAULTTONEAREST, OUT_DEFAULT_PRECIS,
+    PAINTSTRUCT, PS_SOLID, TRANSPARENT,
 };
-use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, RegisterClassExW, SetWindowPos,
@@ -29,7 +27,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows_core::{w, PCWSTR};
 
-use crate::globals::{guard, module, wide, wide_nul};
+use crate::globals::{self, guard, module, wide, wide_nul};
 
 const PER_PAGE: usize = lightbopomofo_core::composer::PAGE_SIZE;
 const CLASS: PCWSTR = w!("LightBopomofoCandidates");
@@ -66,21 +64,7 @@ fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
 }
 
 fn dark_mode() -> bool {
-    let mut value = 1u32;
-    let mut size = 4u32;
-    let ok = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
-            w!("AppsUseLightTheme"),
-            RRF_RT_REG_DWORD,
-            None,
-            Some(&mut value as *mut u32 as *mut _),
-            Some(&mut size),
-        )
-    }
-    .is_ok();
-    ok && value == 0
+    globals::personalize_flag(w!("AppsUseLightTheme")) == Some(0)
 }
 
 fn theme() -> Theme {
