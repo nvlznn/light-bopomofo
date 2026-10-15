@@ -6,7 +6,9 @@
 #   macos/package-dmg.sh                                               unsigned (testing)
 #
 # Uses dmgbuild (writes the Finder layout directly, no Finder scripting),
-# installed into target/dmg-venv on first use.
+# installed into target/dmg-venv on first use. The volume name stays ASCII:
+# the background is found through a classic alias, whose volume-name field
+# cannot hold Chinese, and Finder then shows no background at all.
 set -eu
 . "$(dirname "$0")/common.sh"
 OUT="$ROOT/dist/LightBopomofo.dmg"
@@ -24,7 +26,7 @@ mkdir -p "$(dirname "$OUT")"
     -D app="$APP" \
     -D background="$ROOT/macos/dmg/background.tiff" \
     -D icon="$ROOT/macos/App/Resources/AppIcon.icns" \
-    "輕注音" "$OUT" >/dev/null
+    "Light Bopomofo" "$OUT" >/dev/null
 if [ -n "${SIGN_IDENTITY:-}" ]; then
     codesign --force --timestamp --sign "$SIGN_IDENTITY" "$OUT"
 fi

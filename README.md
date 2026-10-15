@@ -22,7 +22,7 @@ cargo run --release -p lightbopomofo-cli                   # 互動模式；以 
 ## 安裝到 macOS（開發版）
 
 ```sh
-macos/build.sh        # 編出 macos/build/LightBopomofo.app（通用版、本機簽署）
+macos/build.sh        # 編出 macos/build/輕注音.app（通用版、本機簽署）
 macos/install.sh      # 只安裝 App 內含的輸入法到 ~/Library/Input Methods 並啟用
 macos/test.sh         # 輸入邏輯與安裝程式的測試（不會動到系統）
 macos/package-dmg.sh  # 產生 dist/LightBopomofo.dmg

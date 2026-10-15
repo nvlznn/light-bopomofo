@@ -9,6 +9,7 @@ app_name = app.rstrip("/").split("/")[-1]
 format = "UDZO"
 filesystem = "HFS+"
 files = [app]
+hide_extensions = [app_name]
 symlinks = {"Applications": "/Applications"}
 icon = defines["icon"]  # noqa: F821
 
