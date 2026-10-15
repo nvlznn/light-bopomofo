@@ -92,7 +92,8 @@ final class InputController: IMKInputController {
             return .other
         }
         switch event.keyCode {
-        case 49, 36, 76: return .commit  // space, return, keypad enter
+        case 49: return .symbol(Composer.firstTone)  // space
+        case 36, 76: return .commit  // return, keypad enter
         case 51: return .backspace
         case 53: return .escape
         case 123, 126: return .previous  // ←, ↑

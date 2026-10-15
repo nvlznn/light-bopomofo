@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::Path;
 
-use crate::bopomofo::{is_symbol, is_tone};
+use crate::bopomofo::{is_symbol, is_tone, FIRST_TONE};
 
 pub const MAX_SYLLABLE_LEN: usize = 3;
 pub const ROOT: u32 = 0;
@@ -33,7 +33,7 @@ impl Syllable {
         let tone = match chars.last() {
             Some(&c) if is_tone(c) => {
                 chars.pop();
-                Some(c)
+                (c != FIRST_TONE).then_some(c)
             }
             _ => None,
         };

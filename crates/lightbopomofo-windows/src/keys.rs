@@ -4,6 +4,7 @@
 //! 大千 uses physical positions, so keys are read as virtual-key codes (the
 //! US-layout key at that position), not as characters of the active layout.
 
+use lightbopomofo_core::bopomofo::FIRST_TONE;
 use lightbopomofo_core::{dachen, Key};
 
 #[allow(dead_code)]
@@ -87,7 +88,8 @@ pub fn translate(vk: u16, m: Modifiers) -> Option<Key> {
         return Some(Key::Other); // shortcuts: commit, then the app's
     }
     let key = match vk {
-        vk::SPACE | vk::RETURN => Key::Commit,
+        vk::SPACE => Key::Symbol(FIRST_TONE),
+        vk::RETURN => Key::Commit,
         vk::BACK => Key::Backspace,
         vk::ESCAPE => Key::Escape,
         vk::LEFT | vk::UP => Key::Previous,
@@ -170,7 +172,7 @@ mod tests {
 
     #[test]
     fn editing_keys() {
-        assert_eq!(translate(vk::SPACE, NONE), Some(Key::Commit));
+        assert_eq!(translate(vk::SPACE, NONE), Some(Key::Symbol(FIRST_TONE)));
         assert_eq!(translate(vk::RETURN, NONE), Some(Key::Commit));
         assert_eq!(translate(vk::BACK, NONE), Some(Key::Backspace));
         assert_eq!(translate(vk::ESCAPE, NONE), Some(Key::Escape));
@@ -208,6 +210,7 @@ mod tests {
     fn what_starts_a_composition() {
         assert!(starts_composition(&Key::Symbol('ㄋ')));
         assert!(!starts_composition(&Key::Symbol('ˇ')));
+        assert!(!starts_composition(&Key::Symbol(FIRST_TONE))); // Space
         assert!(starts_composition(&Key::Punctuation("，".into())));
         assert!(!starts_composition(&Key::Commit));
         assert!(!starts_composition(&Key::Other));

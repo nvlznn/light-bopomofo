@@ -2,8 +2,8 @@ import Foundation
 
 /// Platform-independent key, already translated from the OS event.
 enum Key: Equatable {
-    case symbol(Character)  // bopomofo symbol or tone mark
-    case commit  // Space, Enter
+    case symbol(Character)  // bopomofo symbol or tone mark; Space is the first tone ˉ
+    case commit  // Enter: commit the selected candidate
     case backspace
     case escape
     case previous  // ←, ↑, Shift+Tab
@@ -23,7 +23,8 @@ struct KeyResult: Equatable {
 /// No InputMethodKit here, so it can be tested directly.
 final class Composer {
     static let maxSymbols = 40
-    static let tones: Set<Character> = ["ˊ", "ˇ", "ˋ", "˙"]
+    static let firstTone: Character = "ˉ"
+    static let tones: Set<Character> = [firstTone, "ˊ", "ˇ", "ˋ", "˙"]
 
     private let engine: Engine
     private(set) var symbols: [Character] = []
@@ -48,6 +49,10 @@ final class Composer {
         case .symbol(let s):
             if isEmpty && Composer.tones.contains(s) {
                 return KeyResult(handled: false)
+            }
+            // Space after a tone: the syllable is already finished.
+            if s == Composer.firstTone, let last = symbols.last, Composer.tones.contains(last) {
+                return KeyResult(handled: true)
             }
             let flushed = symbols.count >= Composer.maxSymbols ? commitAll() : ""
             symbols.append(s)

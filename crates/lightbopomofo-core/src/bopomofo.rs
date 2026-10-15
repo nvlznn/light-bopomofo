@@ -8,14 +8,17 @@ pub enum Kind {
     Medial,
     /// 韻母 ㄚ–ㄦ
     Final,
-    /// 聲調 ˊˇˋ˙ (first tone has no mark)
+    /// 聲調 ˉˊˇˋ˙ (ˉ, first tone, is typed with Space; the lexicon leaves
+    /// first tone unmarked)
     Tone,
 }
 
 pub const INITIALS: &str = "ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙ";
 pub const MEDIALS: &str = "ㄧㄨㄩ";
 pub const FINALS: &str = "ㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ";
-pub const TONES: &str = "ˊˇˋ˙";
+pub const TONES: &str = "ˉˊˇˋ˙";
+/// First tone (平聲), typed with Space.
+pub const FIRST_TONE: char = 'ˉ';
 
 pub fn kind(c: char) -> Option<Kind> {
     if INITIALS.contains(c) {
@@ -51,6 +54,7 @@ mod tests {
         assert_eq!(kind('ㄩ'), Some(Kind::Medial));
         assert_eq!(kind('ㄦ'), Some(Kind::Final));
         assert_eq!(kind('˙'), Some(Kind::Tone));
+        assert_eq!(kind(FIRST_TONE), Some(Kind::Tone));
         assert_eq!(kind('a'), None);
         assert_eq!(INITIALS.chars().count(), 21);
         assert_eq!(FINALS.chars().count(), 13);

@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use crate::bopomofo::is_tone;
+use crate::bopomofo::{is_tone, FIRST_TONE};
 use crate::history::{History, HistoryEntry};
 use crate::lexicon::{Lexicon, MAX_SYLLABLE_LEN, ROOT};
 
@@ -364,7 +364,9 @@ impl Engine {
             if let Some((&last, rest)) = typed.split_last() {
                 if is_tone(last) {
                     toned = true;
-                    if syl.tone as u32 != last as u32 {
+                    // The lexicon stores first tone as 0.
+                    let want = if last == FIRST_TONE { 0 } else { last as u32 };
+                    if syl.tone as u32 != want {
                         return None;
                     }
                     typed = rest;
@@ -495,6 +497,20 @@ mod tests {
         assert!(t.contains(&"感悟"), "{t:?}");
         assert!(!t.contains(&"公務"), "{t:?}");
         assert!(!t.contains(&"工"), "{t:?}");
+    }
+
+    #[test]
+    fn first_tone_mark_matches_unmarked_syllables() {
+        // ㄍㄨˉ: 姑 is first tone; 古 (ˇ) must not appear.
+        let c = engine().query_str("ㄍㄨˉ");
+        assert_eq!(c[0].text, "姑");
+        // Only as a prefix candidate for ㄍ alone.
+        assert!(c.iter().all(|c| c.text != "古" || c.consumed == 1));
+        // ㄍˉㄨ: first char in first tone → 公務 (ㄍㄨㄥ), not 感悟 (ㄍㄢˇ).
+        let t = engine().query_str("ㄍˉㄨ");
+        let t = texts(&t);
+        assert!(t.contains(&"公務"), "{t:?}");
+        assert!(!t.contains(&"感悟"), "{t:?}");
     }
 
     #[test]

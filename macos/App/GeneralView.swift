@@ -13,9 +13,9 @@ struct GeneralView: View {
                     Text("每個字只打第一個注音，例如 ㄋㄏㄇ → 你好嗎、ㄍㄗㄈㄈ → 工作方法。也可以打完整注音或加上聲調來縮小範圍。")
                         .fixedSize(horizontal: false, vertical: true)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                        KeyRow(keys: "空白／Enter", action: "送出選中的候選")
+                        KeyRow(keys: "Enter", action: "送出選中的候選")
                         KeyRow(keys: "← →／Tab", action: "選擇候選；可以只選前段，剩下的接著選")
-                        KeyRow(keys: "3 4 6 7", action: "聲調 ˇ ˋ ˊ ˙（可省略）")
+                        KeyRow(keys: "空白 3 4 6 7", action: "聲調 ˉ ˇ ˋ ˊ ˙（可省略）")
                         KeyRow(keys: "Backspace／Esc", action: "刪除一個注音／清空")
                         KeyRow(keys: "Shift + , . / 1 ;", action: "，。？！：")
                     }

@@ -226,6 +226,10 @@ mod imp {
         Key(VK_SPACE, Mod::None)
     }
 
+    fn enter() -> Step {
+        Key(VK_RETURN, Mod::None)
+    }
+
     fn right() -> Step {
         Key(VK_RIGHT, Mod::None)
     }
@@ -233,17 +237,17 @@ mod imp {
     fn scenarios() -> Vec<(&'static str, Vec<Step>)> {
         vec![
             (
-                "ㄋㄏㄇ shows inline, Space → 你好嗎",
+                "ㄋㄏㄇ shows inline, Enter → 你好嗎",
                 vec![
                     Type("sca"),
                     ExpectInline("ㄋㄏㄇ"),
-                    space(),
+                    enter(),
                     Expect("你好嗎"),
                 ],
             ),
             (
                 "whole conversion ㄍㄗㄈㄈ → 工作方法",
-                vec![Type("eyzz"), space(), Expect("工作方法")],
+                vec![Type("eyzz"), enter(), Expect("工作方法")],
             ),
             (
                 "choose the front part 工作, the rest stays",
@@ -253,9 +257,9 @@ mod imp {
                     right(),
                     right(),
                     right(),
-                    space(),
+                    enter(),
                     ExpectInline("工作ㄈㄈ"),
-                    space(),
+                    enter(),
                     Expect("工作方法"),
                 ],
             ),
@@ -286,10 +290,22 @@ mod imp {
                     Expect(""),
                 ],
             ),
-            ("tone ㄇㄚˇ → 馬", vec![Type("a83"), space(), Expect("馬")]),
+            ("tone ㄇㄚˇ → 馬", vec![Type("a83"), enter(), Expect("馬")]),
             (
-                "Enter commits",
-                vec![Type("sca"), Key(VK_RETURN, Mod::None), Expect("你好嗎")],
+                "Space is the first tone: ㄊㄧㄢˉ → 天",
+                vec![
+                    Type("wu0"),
+                    space(),
+                    ExpectInline("ㄊㄧㄢˉ"),
+                    space(),
+                    ExpectInline("ㄊㄧㄢˉ"),
+                    enter(),
+                    Expect("天"),
+                ],
+            ),
+            (
+                "Space with nothing composed types a space",
+                vec![space(), Expect(" ")],
             ),
             (
                 "lone Shift switches to English and back",
@@ -299,7 +315,7 @@ mod imp {
                     Expect("abc"),
                     ShiftTap,
                     Type("sca"),
-                    space(),
+                    enter(),
                     Expect("abc你好嗎"),
                 ],
             ),
@@ -326,16 +342,16 @@ mod imp {
                     Type("wfcc"),
                     right(),
                     right(),
-                    space(),
+                    enter(),
                     ExpectPrefix("天氣"),
-                    space(),
+                    enter(),
                     ExpectPrefix("天氣"),
                     Save,
                 ],
             ),
             (
                 "…and comes back first next time",
-                vec![Type("wfcc"), space(), ExpectSaved],
+                vec![Type("wfcc"), enter(), ExpectSaved],
             ),
         ]
     }

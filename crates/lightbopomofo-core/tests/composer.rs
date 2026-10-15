@@ -3,6 +3,7 @@
 
 use std::sync::OnceLock;
 
+use lightbopomofo_core::bopomofo::FIRST_TONE;
 use lightbopomofo_core::composer::{Composer, Key, KeyResult, MAX_SYMBOLS};
 use lightbopomofo_core::lexicon::{compile, Lexicon};
 use lightbopomofo_core::{Engine, History};
@@ -100,6 +101,7 @@ fn keys_pass_through_when_empty() {
         Key::Next,
         Key::Other,
         Key::Symbol('ˇ'),
+        Key::Symbol(FIRST_TONE), // Space
     ] {
         assert_eq!(
             c.handle(&mut e, key.clone()),
@@ -167,4 +169,28 @@ fn long_input_flushes() {
     }
     assert!(!flushed.is_empty());
     assert_eq!(c.composing_text(), "ㄋ");
+}
+
+#[test]
+fn space_is_first_tone() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄊㄧㄢ");
+    assert_eq!(c.handle(&mut e, Key::Symbol(FIRST_TONE)), handled(""));
+    assert_eq!(c.composing_text(), "ㄊㄧㄢˉ");
+    assert_eq!(first(&c), "天");
+    // 田 is second tone.
+    assert!(c
+        .candidates()
+        .iter()
+        .all(|x| x.text != "田" || x.consumed < 4));
+    assert_eq!(c.handle(&mut e, Key::Commit), handled("天"));
+}
+
+#[test]
+fn space_after_a_tone_does_nothing() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄇㄚˇ");
+    assert_eq!(c.handle(&mut e, Key::Symbol(FIRST_TONE)), handled(""));
+    assert_eq!(c.composing_text(), "ㄇㄚˇ");
+    assert_eq!(first(&c), "馬");
 }

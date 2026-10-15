@@ -4,14 +4,15 @@
 //!
 //! Mirrors macos/IME/Composer.swift (same behaviour, same test scenarios).
 
+use crate::bopomofo::FIRST_TONE;
 use crate::engine::{Candidate, Engine};
 
 /// Platform-independent key, already translated from the OS event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Key {
-    /// A bopomofo symbol or tone mark.
+    /// A bopomofo symbol or tone mark; Space is the first-tone mark ˉ.
     Symbol(char),
-    /// Space, Enter.
+    /// Enter: commit the selected candidate.
     Commit,
     Backspace,
     Escape,
@@ -96,6 +97,9 @@ impl Composer {
                     // A new composition: pick up what other processes learned
                     // or forgot (one metadata call when nothing changed).
                     engine.refresh_history();
+                } else if s == FIRST_TONE && self.symbols.last().is_some_and(|&c| is_tone(c)) {
+                    // Space after a tone: the syllable is already finished.
+                    return KeyResult::handled(String::new());
                 }
                 let flushed = if self.symbols.len() >= MAX_SYMBOLS {
                     self.commit_all(engine)

@@ -35,12 +35,12 @@ func select(_ c: Composer, _ text: String) -> Bool {
 
 let started = Date()
 
-// Whole conversion on Space.
+// Whole conversion on Enter.
 do {
     let c = makeComposer()
     type(c, "ㄋㄏㄇ")
     check(c.candidates.first?.text == "你好嗎", "first candidate \(c.candidates.first?.text ?? "-")")
-    check(c.handle(.commit) == KeyResult(handled: true, commit: "你好嗎"), "space commits")
+    check(c.handle(.commit) == KeyResult(handled: true, commit: "你好嗎"), "enter commits")
     check(c.isEmpty && c.candidates.isEmpty, "empty after commit")
 }
 
@@ -81,7 +81,7 @@ do {
 // Keys with an empty composition go to the app.
 do {
     let c = makeComposer()
-    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol("ˇ")] {
+    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol("ˇ"), .symbol(Composer.firstTone)] {
         check(c.handle(key) == KeyResult(handled: false), "\(key) passes through when empty")
     }
 }
@@ -117,6 +117,25 @@ do {
     type(c, "ㄇㄚˇ")
     check(c.composingText == "ㄇㄚˇ", "tone kept")
     check(c.candidates.first?.text == "馬", "ㄇㄚˇ → \(c.candidates.first?.text ?? "-")")
+}
+
+// Space is the first tone: ㄊㄧㄢˉ → 天, never second-tone 田 for the whole input.
+do {
+    let c = makeComposer()
+    type(c, "ㄊㄧㄢ")
+    check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: true), "space is handled")
+    check(c.composingText == "ㄊㄧㄢˉ", "first tone shown")
+    check(c.candidates.first?.text == "天", "ㄊㄧㄢˉ → \(c.candidates.first?.text ?? "-")")
+    check(c.candidates.allSatisfy { $0.text != "田" || $0.consumed < 4 }, "田 filtered out")
+    check(c.handle(.commit) == KeyResult(handled: true, commit: "天"), "enter commits 天")
+}
+
+// Space after a tone does nothing.
+do {
+    let c = makeComposer()
+    type(c, "ㄇㄚˇ")
+    check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: true), "space after tone handled")
+    check(c.composingText == "ㄇㄚˇ", "space after tone ignored")
 }
 
 // Very long input flushes instead of growing without bound.
