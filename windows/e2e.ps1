@@ -1,52 +1,100 @@
-# End-to-end check of the Windows input method on a real Windows machine
-# (CI): install the freshly built DLLs like the installer does, add 輕注音
-# to the user's input methods, then type through it in a test window
-# (examples/e2e.rs) and read back what arrived.
-# Expects windows\build.ps1 to have run (target\windows-stage). Needs admin.
+# End-to-end test of 輕注音 for Windows on a real machine (CI), through the
+# real installer: install silently, check registration, type through the
+# input method in 64- and 32-bit processes (examples/e2e.rs), update while
+# the input method is loaded, uninstall. Needs admin and windows\build.ps1
+# to have produced dist\LightBopomofo-Setup.exe.
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path "$PSScriptRoot\.."
 Set-Location $root
-$stage = "target\windows-stage"
+$setup = "$root\dist\LightBopomofo-Setup.exe"
 $dir = "$env:ProgramFiles\LightBopomofo"
-$tip = "0404:{0D5E0D6E-3056-4888-9151-8701B588AD0C}{31638591-41D6-4DC9-B7D8-C2F29953F24B}"
-$failures = @()
+$clsid = "{0D5E0D6E-3056-4888-9151-8701B588AD0C}"
+$profile = "{31638591-41D6-4DC9-B7D8-C2F29953F24B}"
+$tip = "0404:$clsid$profile"
+$history = "$env:APPDATA\LightBopomofo\history.tsv"
+$script:failures = @()
 
-function Check($name, $condition, $detail) {
+function Check($name, $condition, $detail = "") {
     if ($condition) { Write-Host "PASS $name" }
     else { Write-Host "FAIL $name $detail"; $script:failures += $name }
 }
 
-# 1. Install like the installer does.
-New-Item -ItemType Directory -Force "$dir\x64", "$dir\x86" | Out-Null
-Copy-Item "$stage\lexicon.bin", "$stage\lightbopomofo.ico" $dir
-Copy-Item "$stage\x64\lightbopomofo.dll", "$stage\x64\LightBopomofo.exe" "$dir\x64"
-Copy-Item "$stage\x64\LightBopomofo.exe" $dir
-Copy-Item "$stage\x86\lightbopomofo.dll" "$dir\x86"
-$r64 = Start-Process "$env:windir\System32\regsvr32.exe" -ArgumentList "/s", "`"$dir\x64\lightbopomofo.dll`"" -Wait -PassThru
-$r32 = Start-Process "$env:windir\SysWOW64\regsvr32.exe" -ArgumentList "/s", "`"$dir\x86\lightbopomofo.dll`"" -Wait -PassThru
-Check "register x64" ($r64.ExitCode -eq 0) "exit $($r64.ExitCode)"
-Check "register x86" ($r32.ExitCode -eq 0) "exit $($r32.ExitCode)"
-Check "COM class registered" (Test-Path "Registry::HKEY_CLASSES_ROOT\CLSID\{0D5E0D6E-3056-4888-9151-8701B588AD0C}\InprocServer32") ""
-Check "TSF profile registered" (Test-Path "HKLM:\SOFTWARE\Microsoft\CTF\TIP\{0D5E0D6E-3056-4888-9151-8701B588AD0C}") ""
+function Wait-Exit($file, [string[]]$arguments) {
+    (Start-Process $file -ArgumentList $arguments -Wait -PassThru).ExitCode
+}
 
-# 2. Add it to the user's input methods (the app's --enable), make it default.
-$enable = Start-Process "$dir\LightBopomofo.exe" -ArgumentList "--enable" -Wait -PassThru
-Check "app --enable" ($enable.ExitCode -eq 0) "exit $($enable.ExitCode)"
-$listed = Get-ChildItem "HKCU:\Control Panel\International\User Profile" -ErrorAction SilentlyContinue |
-    Where-Object { (Get-ItemProperty $_.PSPath).PSObject.Properties.Name -contains $tip }
-Check "in user's input methods" ($null -ne $listed) ""
+function In-UserList {
+    $null -ne (Get-ChildItem "HKCU:\Control Panel\International\User Profile" -ErrorAction SilentlyContinue |
+        Where-Object { (Get-ItemProperty $_.PSPath).PSObject.Properties.Name -contains $tip })
+}
 
-# 3. Activate 輕注音 in a test window, type with real key presses, read back
-#    (crates/lightbopomofo-windows/examples/e2e.rs; built by this script).
-cargo build --release -p lightbopomofo-windows --example e2e --target x86_64-pc-windows-msvc
-$e2e = "target\x86_64-pc-windows-msvc\release\examples\e2e.exe"
-$output = & $e2e
-$output | ForEach-Object { Write-Host $_ }
-if ($LASTEXITCODE -ne 0) { $failures += "typing ($LASTEXITCODE failed)" }
+function Server-Path($view) {
+    $key = [Microsoft.Win32.RegistryKey]::OpenBaseKey("ClassesRoot", $view).OpenSubKey("CLSID\$clsid\InprocServer32")
+    if ($key) { $key.GetValue("") } else { $null }
+}
 
-# 4. The log, whatever happened.
+function Run-Typing($triple, $label) {
+    $exe = "target\$triple\release\examples\e2e.exe"
+    $output = & $exe
+    $code = $LASTEXITCODE
+    $output | ForEach-Object { Write-Host "  [$label] $_" }
+    Check "typing in a $label process" ($code -eq 0) "($code scenario(s) failed)"
+}
+
+Write-Host "== build the test program (64- and 32-bit)"
+foreach ($t in "x86_64-pc-windows-msvc", "i686-pc-windows-msvc") {
+    cargo build --release -p lightbopomofo-windows --example e2e --target $t
+    if ($LASTEXITCODE -ne 0) { throw "building e2e for $t failed" }
+}
+
+Write-Host "== install"
+$code = Wait-Exit $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-install.log`"")
+Check "installer exit code" ($code -eq 0) "($code)"
+foreach ($f in "lexicon.bin", "LightBopomofo.exe", "lightbopomofo.ico", "x64\lightbopomofo.dll", "x86\lightbopomofo.dll", "licenses\tsi.csv", "licenses\LGPL-2.1.txt") {
+    Check "installed $f" (Test-Path "$dir\$f")
+}
+Check "64-bit COM server" ((Server-Path "Registry64") -eq "$dir\x64\lightbopomofo.dll") "($(Server-Path 'Registry64'))"
+Check "32-bit COM server" ((Server-Path "Registry32") -eq "$dir\x86\lightbopomofo.dll") "($(Server-Path 'Registry32'))"
+Check "TSF language profile" (Test-Path "HKLM:\SOFTWARE\Microsoft\CTF\TIP\$clsid\LanguageProfile\0x00000404\$profile")
+Check "in the user's input methods" (In-UserList)
+Check "Start menu shortcut" (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\輕注音.lnk")
+$code = Wait-Exit "$dir\LightBopomofo.exe" @("--status")
+Check "app reports ready" ($code -eq 0) "(status $code)"
+
+Write-Host "== type"
+Run-Typing "x86_64-pc-windows-msvc" "64-bit"
+Run-Typing "i686-pc-windows-msvc" "32-bit"
+Check "history written" ((Test-Path $history) -and (Get-Item $history).Length -gt 0)
+
+Write-Host "== update while in use"
+$holder = Start-Process "target\x86_64-pc-windows-msvc\release\examples\e2e.exe" -ArgumentList "--hold", "180" -PassThru
+Start-Sleep -Seconds 8
+$code = Wait-Exit $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-update.log`"")
+Check "update exit code" ($code -eq 0) "($code)"
+Check "loaded DLL moved aside, not left for a reboot" ((Get-ChildItem "$dir\x64" -Filter *.old).Count -ge 1)
+Check "new DLL in place" (Test-Path "$dir\x64\lightbopomofo.dll")
+Run-Typing "x86_64-pc-windows-msvc" "64-bit, after update"
+Stop-Process -Id $holder.Id -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+Write-Host "== uninstall"
+$code = Wait-Exit "$dir\unins000.exe" @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$env:TEMP\setup-uninstall.log`"")
+Start-Sleep -Seconds 5
+Check "uninstaller exit code" ($code -eq 0) "($code)"
+Check "COM class removed" ($null -eq (Server-Path "Registry64"))
+Check "32-bit COM class removed" ($null -eq (Server-Path "Registry32"))
+Check "removed from the user's input methods" (-not (In-UserList))
+Check "DLLs removed" ((-not (Test-Path "$dir\x64\lightbopomofo.dll")) -and (-not (Test-Path "$dir\x86\lightbopomofo.dll")))
+Check "history kept" (Test-Path $history)
+
+Write-Host "== logs"
 $log = "$env:LOCALAPPDATA\LightBopomofo\logs\ime.log"
-if (Test-Path $log) { Write-Host "---- ime.log"; Get-Content $log -Tail 40 } else { Write-Host "no ime.log" }
-
-if ($failures.Count -gt 0) { throw "e2e failed: $($failures -join ', ')" }
+if (Test-Path $log) { Write-Host "---- ime.log"; Get-Content $log -Tail 60 } else { Write-Host "no ime.log" }
+if ($script:failures.Count -gt 0) {
+    foreach ($l in "install", "update", "uninstall") {
+        $f = "$env:TEMP\setup-$l.log"
+        if (Test-Path $f) { Write-Host "---- setup-$l.log (tail)"; Get-Content $f -Tail 25 }
+    }
+    throw "e2e failed: $($script:failures -join ', ')"
+}
 Write-Host "e2e: all passed"

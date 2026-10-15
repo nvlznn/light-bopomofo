@@ -1,7 +1,11 @@
-//! End-to-end check on Windows (run by windows/e2e.ps1 after the DLL is
-//! installed and registered): activate 輕注音 in this process — as choosing
-//! it with Win+Space would — type into an Edit control with real key
-//! presses (SendInput) and read back what arrived. Exit code 0 = all passed.
+//! End-to-end check on Windows (run by windows/e2e.ps1 after installing):
+//! activate 輕注音 in this process — as choosing it with Win+Space would —
+//! type into an Edit control with real key presses (SendInput) and check
+//! what arrives, step by step.
+//!
+//!   e2e.exe              run every scenario; exit code = number of failures
+//!   e2e.exe --hold SECS  activate and keep the input method loaded (for the
+//!                        update-while-in-use test)
 
 #[cfg(not(windows))]
 fn main() {
@@ -23,8 +27,9 @@ mod imp {
     };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, SetFocus, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_ESCAPE, VK_OEM_COMMA, VK_SHIFT, VK_SPACE,
+        GetKeyState, SendInput, SetFocus, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL,
+        VK_ESCAPE, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE,
     };
     use windows::Win32::UI::TextServices::{
         CLSID_TF_InputProcessorProfiles, ITfInputProcessorProfileMgr,
@@ -41,7 +46,26 @@ mod imp {
     const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x0d5e0d6e_3056_4888_9151_8701b588ad0c);
     const GUID_PROFILE: GUID = GUID::from_u128(0x31638591_41d6_4dc9_b7d8_c2f29953f24b);
 
-    /// Process window messages for a while (TSF handles keys in the pump).
+    #[derive(Clone, Copy)]
+    enum Mod {
+        None,
+        Shift,
+        Ctrl,
+    }
+
+    enum Step {
+        /// 大千 keys typed as letters/digits (e.g. "sca" = ㄋㄏㄇ).
+        Type(&'static str),
+        Key(VIRTUAL_KEY, Mod),
+        /// Shift pressed and released alone (中/英 switch).
+        ShiftTap,
+        Expect(&'static str),
+        ExpectPrefix(&'static str),
+        Save,
+        ExpectSaved,
+    }
+    use Step::*;
+
     fn pump(ms: u64) {
         let until = Instant::now() + Duration::from_millis(ms);
         let mut msg = MSG::default();
@@ -56,7 +80,7 @@ mod imp {
         }
     }
 
-    fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
+    fn input(vk: VIRTUAL_KEY, up: bool) -> INPUT {
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
@@ -73,30 +97,36 @@ mod imp {
         }
     }
 
-    /// Press and release `vk`, with Shift held when `shift`.
-    fn tap(vk: VIRTUAL_KEY, shift: bool) {
-        let mut inputs = Vec::new();
-        if shift {
-            inputs.push(key(VK_SHIFT, false));
-        }
-        inputs.push(key(vk, false));
-        inputs.push(key(vk, true));
-        if shift {
-            inputs.push(key(VK_SHIFT, true));
-        }
+    fn send(inputs: &[INPUT]) {
         unsafe {
-            SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+            SendInput(inputs, std::mem::size_of::<INPUT>() as i32);
         }
         pump(120);
     }
 
-    /// Keys to press: virtual key and whether Shift is held.
-    type Keys = Vec<(VIRTUAL_KEY, bool)>;
+    fn press(vk: VIRTUAL_KEY, m: Mod) {
+        let modifier = match m {
+            Mod::None => None,
+            Mod::Shift => Some(VK_SHIFT),
+            Mod::Ctrl => Some(VK_CONTROL),
+        };
+        let mut inputs = Vec::new();
+        inputs.extend(modifier.map(|k| input(k, false)));
+        inputs.push(input(vk, false));
+        inputs.push(input(vk, true));
+        inputs.extend(modifier.map(|k| input(k, true)));
+        send(&inputs);
+    }
 
-    fn letters(s: &str) -> Keys {
-        s.chars()
-            .map(|c| (VIRTUAL_KEY(c.to_ascii_uppercase() as u16), false))
-            .collect()
+    fn type_keys(s: &str) {
+        for c in s.chars() {
+            let vk = match c {
+                ',' => VK_OEM_COMMA,
+                '.' => VK_OEM_PERIOD,
+                c => VIRTUAL_KEY(c.to_ascii_uppercase() as u16),
+            };
+            press(vk, Mod::None);
+        }
     }
 
     fn text(hwnd: HWND) -> String {
@@ -105,7 +135,176 @@ mod imp {
         String::from_utf16_lossy(&buf[..n.max(0) as usize])
     }
 
+    fn clear(hwnd: HWND) {
+        let empty = [0u16];
+        unsafe {
+            SendMessageW(
+                hwnd,
+                WM_SETTEXT,
+                Some(WPARAM(0)),
+                Some(LPARAM(empty.as_ptr() as isize)),
+            );
+        }
+        pump(100);
+    }
+
+    fn caps_on() -> bool {
+        (unsafe { GetKeyState(VK_CAPITAL.0 as i32) }) & 1 != 0
+    }
+
+    fn space() -> Step {
+        Key(VK_SPACE, Mod::None)
+    }
+
+    fn right() -> Step {
+        Key(VK_RIGHT, Mod::None)
+    }
+
+    fn scenarios() -> Vec<(&'static str, Vec<Step>)> {
+        vec![
+            (
+                "ㄋㄏㄇ shows inline, Space → 你好嗎",
+                vec![Type("sca"), Expect("ㄋㄏㄇ"), space(), Expect("你好嗎")],
+            ),
+            (
+                "whole conversion ㄍㄗㄈㄈ → 工作方法",
+                vec![Type("eyzz"), space(), Expect("工作方法")],
+            ),
+            (
+                "choose the front part 工作, the rest stays",
+                vec![
+                    Type("eyzz"),
+                    right(),
+                    right(),
+                    right(),
+                    right(),
+                    space(),
+                    Expect("工作ㄈㄈ"),
+                    space(),
+                    Expect("工作方法"),
+                ],
+            ),
+            (
+                "Shift+, commits then ，",
+                vec![
+                    Type("sca"),
+                    Key(VK_OEM_COMMA, Mod::Shift),
+                    Expect("你好嗎，"),
+                ],
+            ),
+            (
+                "Shift+. alone → 。",
+                vec![Key(VK_OEM_PERIOD, Mod::Shift), Expect("。")],
+            ),
+            (
+                "Esc drops the composition",
+                vec![Type("sc"), Key(VK_ESCAPE, Mod::None), Expect("")],
+            ),
+            (
+                "Backspace removes symbols, then passes through",
+                vec![
+                    Type("sca"),
+                    Key(VK_BACK, Mod::None),
+                    Expect("ㄋㄏ"),
+                    Key(VK_BACK, Mod::None),
+                    Key(VK_BACK, Mod::None),
+                    Expect(""),
+                ],
+            ),
+            ("tone ㄇㄚˇ → 馬", vec![Type("a83"), space(), Expect("馬")]),
+            (
+                "Enter commits",
+                vec![Type("sca"), Key(VK_RETURN, Mod::None), Expect("你好嗎")],
+            ),
+            (
+                "lone Shift switches to English and back",
+                vec![
+                    ShiftTap,
+                    Type("abc"),
+                    Expect("abc"),
+                    ShiftTap,
+                    Type("sca"),
+                    space(),
+                    Expect("abc你好嗎"),
+                ],
+            ),
+            (
+                "Caps Lock types English",
+                vec![
+                    Key(VK_CAPITAL, Mod::None),
+                    Type("ab"),
+                    Expect("AB"),
+                    Key(VK_CAPITAL, Mod::None),
+                ],
+            ),
+            (
+                "Ctrl+A while composing commits first",
+                vec![
+                    Type("sca"),
+                    Key(VIRTUAL_KEY(b'A' as u16), Mod::Ctrl),
+                    Expect("你好嗎"),
+                ],
+            ),
+            (
+                "a composition chosen in pieces is learned",
+                vec![
+                    Type("wfcc"),
+                    right(),
+                    right(),
+                    space(),
+                    ExpectPrefix("天氣"),
+                    space(),
+                    ExpectPrefix("天氣"),
+                    Save,
+                ],
+            ),
+            (
+                "…and comes back first next time",
+                vec![Type("wfcc"), space(), ExpectSaved],
+            ),
+        ]
+    }
+
+    fn activate() -> windows_core::Result<()> {
+        unsafe {
+            let profiles: ITfInputProcessorProfileMgr =
+                CoCreateInstance(&CLSID_TF_InputProcessorProfiles, None, CLSCTX_INPROC_SERVER)?;
+            profiles.ActivateProfile(
+                TF_PROFILETYPE_INPUTPROCESSOR,
+                0x0404,
+                &CLSID_TEXT_SERVICE,
+                &GUID_PROFILE,
+                HKL::default(),
+                TF_IPPMF_FORPROCESS | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE,
+            )
+        }
+    }
+
+    fn check(name: &str, edit: HWND, want: &str, prefix: bool) -> bool {
+        pump(200);
+        let got = text(edit);
+        let ok = if prefix {
+            got.starts_with(want)
+        } else {
+            got == want
+        };
+        if !ok {
+            println!(
+                "FAIL {name}: expected '{want}{}', got '{got}'",
+                if prefix { "…" } else { "" }
+            );
+        }
+        ok
+    }
+
     pub fn run() -> i32 {
+        let args: Vec<String> = std::env::args().collect();
+        let hold = (args.get(1).map(String::as_str) == Some("--hold")).then(|| {
+            args.get(2)
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(60)
+        });
+
         unsafe {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             let instance = GetModuleHandleW(None).unwrap_or_default();
@@ -131,64 +330,69 @@ mod imp {
             let _ = SetFocus(Some(edit));
             println!(
                 "{} foreground window",
-                if foreground { "PASS" } else { "NOTE no" }
+                if foreground { "PASS" } else { "NOTE not" }
             );
             pump(500);
+            if caps_on() {
+                press(VK_CAPITAL, Mod::None); // start from a known state
+            }
 
-            let activated = CoCreateInstance::<_, ITfInputProcessorProfileMgr>(
-                &CLSID_TF_InputProcessorProfiles,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )
-            .and_then(|profiles| {
-                profiles.ActivateProfile(
-                    TF_PROFILETYPE_INPUTPROCESSOR,
-                    0x0404,
-                    &CLSID_TEXT_SERVICE,
-                    &GUID_PROFILE,
-                    HKL::default(),
-                    TF_IPPMF_FORPROCESS | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE,
-                )
-            });
-            match &activated {
+            let mut failed = 0;
+            match activate() {
                 Ok(()) => println!("PASS activate 輕注音"),
-                Err(e) => println!("FAIL activate 輕注音: {e}"),
+                Err(e) => {
+                    println!("FAIL activate 輕注音: {e}");
+                    failed += 1;
+                }
             }
             pump(800);
 
-            let mut cases: Vec<(&str, Keys, &str)> = Vec::new();
-            let mut keys = letters("sca");
-            keys.push((VK_SPACE, false));
-            cases.push(("ㄋㄏㄇ + Space → 你好嗎", keys, "你好嗎"));
-            let mut keys = letters("eyzz");
-            keys.push((VK_SPACE, false));
-            cases.push(("ㄍㄗㄈㄈ + Space → 工作方法", keys, "工作方法"));
-            let mut keys = letters("sca");
-            keys.push((VK_OEM_COMMA, true));
-            cases.push(("ㄋㄏㄇ + Shift+, → 你好嗎，", keys, "你好嗎，"));
-            let mut keys = letters("sc");
-            keys.push((VK_ESCAPE, false));
-            cases.push(("ㄋㄏ + Esc → (nothing)", keys, ""));
+            if let Some(seconds) = hold {
+                println!("holding the input method for {seconds} s");
+                pump(seconds * 1000);
+                return failed;
+            }
 
-            let mut failed = activated.is_err() as i32;
-            for (name, keys, expected) in cases {
-                let empty = [0u16];
-                SendMessageW(
-                    edit,
-                    WM_SETTEXT,
-                    Some(WPARAM(0)),
-                    Some(LPARAM(empty.as_ptr() as isize)),
-                );
-                pump(100);
-                for (vk, shift) in keys {
-                    tap(vk, shift);
+            let mut saved = String::new();
+            for (name, steps) in scenarios() {
+                clear(edit);
+                let mut ok = true;
+                for step in steps {
+                    ok = match step {
+                        Type(keys) => {
+                            type_keys(keys);
+                            true
+                        }
+                        Key(vk, m) => {
+                            press(vk, m);
+                            true
+                        }
+                        ShiftTap => {
+                            send(&[input(VK_SHIFT, false), input(VK_SHIFT, true)]);
+                            true
+                        }
+                        Save => {
+                            saved = text(edit);
+                            true
+                        }
+                        Expect(want) => check(name, edit, want, false),
+                        ExpectPrefix(want) => check(name, edit, want, true),
+                        ExpectSaved => {
+                            !saved.is_empty() && check(name, edit, &saved.clone(), false)
+                        }
+                    };
+                    if !ok {
+                        break;
+                    }
                 }
-                pump(400);
-                let got = text(edit);
-                if got == expected {
+                // Leave nothing composing and Caps Lock off for the next one.
+                press(VK_ESCAPE, Mod::None);
+                if caps_on() {
+                    press(VK_CAPITAL, Mod::None);
+                }
+                if ok {
                     println!("PASS {name}");
                 } else {
-                    println!("FAIL {name}: got '{got}'");
                     failed += 1;
                 }
             }

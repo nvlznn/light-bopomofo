@@ -817,6 +817,18 @@ pub fn main() {
     match std::env::args().nth(1).as_deref() {
         Some("--enable") => std::process::exit(if install_layout_or_tip(true) { 0 } else { 1 }),
         Some("--disable") => std::process::exit(if install_layout_or_tip(false) { 0 } else { 1 }),
+        // For tests and diagnosis: 0 ready, 1 installed but not in the
+        // user's input methods, 2 not installed.
+        Some("--status") => {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            }
+            std::process::exit(match status() {
+                Status::Ready => 0,
+                Status::NotEnabled => 1,
+                Status::NotInstalled => 2,
+            })
+        }
         _ => {}
     }
     unsafe {
