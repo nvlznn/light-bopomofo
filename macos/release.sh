@@ -26,15 +26,17 @@ echo "signing $SIGN_IDENTITY"
 export SIGN_IDENTITY
 
 # 1. The app (with the input method inside), notarized and stapled on its
-#    own, so the copy installed into ~/Library/Input Methods carries its
-#    ticket even offline.
+#    own, so it carries its ticket even when the disk image is opened offline.
 "$ROOT/macos/build.sh"
 rm -rf "$WORK" && mkdir -p "$WORK"
 ditto -c -k --keepParent "$APP" "$WORK/LightBopomofo.zip"
 xcrun notarytool submit "$WORK/LightBopomofo.zip" --keychain-profile "$PROFILE" --wait
 xcrun stapler staple "$APP"
-# The input method gets copied out of the app; give it its own ticket too.
-xcrun stapler staple "$IME" || echo "note: could not staple the inner input method; Gatekeeper will check online"
+# Don't staple the inner input method: that writes a ticket file into it
+# after the outer signature sealed it, which breaks the app's signature.
+# It was notarized as part of the app, and the installed copy has its
+# quarantine cleared, so it needs no ticket of its own.
+codesign --verify --deep --strict "$APP"
 
 # 2. The disk image around it.
 "$ROOT/macos/package-dmg.sh"

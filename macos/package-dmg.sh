@@ -42,8 +42,9 @@ hdiutil create -quiet -volname "$VOLUME" -srcfolder "$STAGE" -fs HFS+ -format UD
     -ov "$WORK/rw.dmg"
 hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$WORK/mnt" "$WORK/rw.dmg"
 SetFile -a V "$WORK/mnt/.background" "$WORK/mnt/.VolumeIcon.icns"
-SetFile -a E "$WORK/mnt/$(basename "$APP")"
 SetFile -a C "$WORK/mnt"
+# The copy users get must still carry a valid signature.
+codesign --verify --deep --strict "$WORK/mnt/$(basename "$APP")"
 hdiutil detach -quiet "$WORK/mnt"
 hdiutil convert -quiet "$WORK/rw.dmg" -format UDZO -imagekey zlib-level=9 -o "$OUT"
 
