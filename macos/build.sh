@@ -49,7 +49,7 @@ cp -R "$ROOT/macos/IME/Resources/" "$IME/Contents/Resources/"
 cp "$WORK/lexicon.bin" "$IME/Contents/Resources/"
 licenses "$IME"
 # The lexicon's source, as its LGPL licence asks (lexicon.bin is compiled from it).
-cp "$ROOT/data/tsi.csv" "$IME/Contents/Resources/Licenses/"
+cp "$ROOT/data/tsi.csv" "$ROOT/crates/lightbopomofo-core/lexicon-adjustments.csv" "$IME/Contents/Resources/Licenses/"
 
 # The app around it.
 mkdir -p "$APP/Contents/MacOS"

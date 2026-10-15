@@ -149,3 +149,10 @@ fn most_common_homophone_first() {
     let sh = top("ㄕˋ", 5);
     assert!(sh.contains(&"事".to_string()), "{sh:?}");
 }
+
+#[test]
+fn adjustments_apply() {
+    // lexicon-adjustments.csv adds 什麼意思 and removes 史密斯.
+    assert_eq!(top("ㄕㄇㄧㄙ", 1), ["什麼意思"]);
+    assert!(!top("ㄕㄇㄧㄙ", 100).contains(&"史密斯".to_string()));
+}

@@ -44,7 +44,7 @@ foreach ($arch in $targets.Keys) {
 
 Copy-Item windows\lightbopomofo.ico $stage\
 Copy-Item LICENSE "$stage\licenses\LICENSE.txt"
-Copy-Item DATA_LICENSES.md, licenses\LGPL-2.1.txt, data\tsi.csv "$stage\licenses\"
+Copy-Item DATA_LICENSES.md, licenses\LGPL-2.1.txt, data\tsi.csv, crates\lightbopomofo-core\lexicon-adjustments.csv "$stage\licenses\"
 
 # Traditional Chinese installer messages (Inno Setup's translation); English if unavailable.
 $isl = "windows\ChineseTraditional.isl"

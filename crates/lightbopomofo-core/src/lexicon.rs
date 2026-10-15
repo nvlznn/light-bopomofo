@@ -459,8 +459,26 @@ struct Node {
 }
 
 /// Compile `tsi.csv` text into a binary lexicon image.
+/// 輕注音's changes to the source lexicon: words added (tsi.csv lines) and
+/// words removed ("-word"), applied by [`compile`].
+pub const ADJUSTMENTS: &str = include_str!("../lexicon-adjustments.csv");
+
 pub fn compile(source: &str) -> Vec<u8> {
-    let mut entries: Vec<Entry> = source.lines().filter_map(parse_line).collect();
+    compile_with(source, ADJUSTMENTS)
+}
+
+fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
+    let removed: HashSet<&str> = adjustments
+        .lines()
+        .filter_map(|line| line.strip_prefix('-'))
+        .map(str::trim)
+        .collect();
+    let mut entries: Vec<Entry> = source
+        .lines()
+        .chain(adjustments.lines())
+        .filter_map(parse_line)
+        .filter(|e| !removed.contains(&*e.text))
+        .collect();
     rank_homophones(&mut entries);
 
     let mut nodes = vec![Node {
@@ -658,11 +676,16 @@ fn parse_line(line: &str) -> Option<Entry> {
 mod tests {
     use super::*;
 
+    /// Compiled without 輕注音's adjustments, to test the format alone.
+    fn exact(source: &str) -> Lexicon {
+        Lexicon::from_image(compile_with(source, "")).unwrap()
+    }
+
     const MINI: &str = "# dc:title,test,\n工作,34279,ㄍㄨㄥ ㄗㄨㄛˋ\n工,19861,ㄍㄨㄥ\n嗎,26437,ㄇㄚ˙\nㄅ,0,ㄅ\n壞行,1,ㄏㄨㄞˋ\n";
 
     #[test]
     fn parses_and_indexes() {
-        let lex = Lexicon::parse(MINI);
+        let lex = exact(MINI);
         assert_eq!(lex.len(), 3); // bopomofo entry and malformed line skipped
         let g = lex.child(ROOT, 'ㄍ').unwrap();
         let gz = lex.child(g, 'ㄗ').unwrap();
@@ -684,7 +707,7 @@ mod tests {
     #[test]
     fn homophones_ranked_by_use_in_words() {
         // 氏 and 事 tie; 事 appears in more words. 是 is a higher tier and stays.
-        let lex = Lexicon::parse(
+        let lex = exact(
             "是,182405,ㄕˋ\n氏,52404,ㄕˋ\n事,52404,ㄕˋ\n故事,5000,ㄍㄨˋ ㄕˋ\n姓氏,100,ㄒㄧㄥˋ ㄕˋ\n",
         );
         let sh = lex.child(ROOT, 'ㄕ').unwrap();
@@ -705,7 +728,7 @@ mod tests {
 
     #[test]
     fn prefixes() {
-        let lex = Lexicon::parse(MINI);
+        let lex = exact(MINI);
         assert!(lex.is_syllable_prefix(&['ㄍ']));
         assert!(lex.is_syllable_prefix(&['ㄍ', 'ㄨ']));
         assert!(lex.is_syllable_prefix(&['ㄍ', 'ㄨ', 'ㄥ']));
@@ -718,7 +741,7 @@ mod tests {
     #[test]
     fn image_round_trips_through_a_file() {
         let path = std::env::temp_dir().join(format!("lb-lexicon-{}.bin", std::process::id()));
-        std::fs::write(&path, compile(MINI)).unwrap();
+        std::fs::write(&path, compile_with(MINI, "")).unwrap();
         let lex = Lexicon::load(&path).unwrap();
         assert_eq!(lex.len(), 3);
         assert!(lex.is_syllable_prefix(&['ㄇ', 'ㄚ']));
@@ -727,7 +750,7 @@ mod tests {
 
     #[test]
     fn empty_lexicon_is_valid() {
-        let lex = Lexicon::parse("# nothing here\n");
+        let lex = exact("# nothing here\n");
         assert!(lex.is_empty());
         assert!(lex.child(ROOT, 'ㄍ').is_none());
         assert!(!lex.is_syllable_prefix(&['ㄍ']));
@@ -735,7 +758,7 @@ mod tests {
 
     #[test]
     fn rejects_corrupt_images() {
-        let good = compile(MINI);
+        let good = compile_with(MINI, "");
         assert!(Lexicon::from_image(good.clone()).is_ok());
         assert!(Lexicon::from_image(good[..HEADER - 1].to_vec()).is_err());
         assert!(Lexicon::from_image(good[..good.len() / 2].to_vec()).is_err());
