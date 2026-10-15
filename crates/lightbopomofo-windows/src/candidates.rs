@@ -14,7 +14,8 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontW, CreatePen, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC,
     GetMonitorInfoW, GetTextExtentPoint32W, InvalidateRect, MonitorFromRect, ReleaseDC, RoundRect,
-    SelectObject, SetBkMode, SetTextColor, TextOutW, CLEARTYPE_QUALITY, DEFAULT_CHARSET, FW_NORMAL,
+    SelectObject, SetBkMode, SetTextColor, TextOutW, CLEARTYPE_QUALITY, DEFAULT_CHARSET, FW_MEDIUM,
+    FW_SEMIBOLD,
     HDC, HFONT, HGDIOBJ, MONITORINFO, MONITOR_DEFAULTTONEAREST, OUT_DEFAULT_PRECIS, PAINTSTRUCT,
     PS_SOLID, TRANSPARENT,
 };
@@ -85,20 +86,20 @@ fn dark_mode() -> bool {
 fn theme() -> Theme {
     if dark_mode() {
         Theme {
-            background: rgb(0x2B, 0x2B, 0x2B),
-            border: rgb(0x45, 0x45, 0x45),
+            background: rgb(0x24, 0x24, 0x24),
+            border: rgb(0x62, 0x62, 0x62),
             text: rgb(0xF2, 0xF2, 0xF2),
-            index: rgb(0x9A, 0x9A, 0x9A),
-            selected: rgb(0x4C, 0xC2, 0xFF),
-            selected_text: rgb(0x00, 0x00, 0x00),
+            index: rgb(0xAB, 0xAB, 0xAB),
+            selected: rgb(0x00, 0x63, 0xE1),
+            selected_text: rgb(0xFF, 0xFF, 0xFF),
         }
     } else {
         Theme {
-            background: rgb(0xFF, 0xFF, 0xFF),
-            border: rgb(0xD1, 0xD1, 0xD1),
+            background: rgb(0xF2, 0xF2, 0xF2),
+            border: rgb(0xB8, 0xB8, 0xB8),
             text: rgb(0x1A, 0x1A, 0x1A),
             index: rgb(0x7A, 0x7A, 0x7A),
-            selected: rgb(0x00, 0x67, 0xC0),
+            selected: rgb(0x00, 0x63, 0xE1),
             selected_text: rgb(0xFF, 0xFF, 0xFF),
         }
     }
@@ -115,7 +116,11 @@ fn font(size: i32, dpi: u32) -> HFONT {
             0,
             0,
             0,
-            FW_NORMAL.0 as i32,
+            if size == INDEX_PT {
+                FW_MEDIUM.0 as i32
+            } else {
+                FW_SEMIBOLD.0 as i32
+            },
             0,
             0,
             0,
@@ -124,7 +129,11 @@ fn font(size: i32, dpi: u32) -> HFONT {
             Default::default(),
             CLEARTYPE_QUALITY,
             0,
-            w!("Microsoft JhengHei UI"),
+            if size == INDEX_PT {
+                w!("Segoe UI")
+            } else {
+                w!("Microsoft JhengHei UI")
+            },
         )
     }
 }
@@ -141,8 +150,8 @@ fn text_width(dc: HDC, text: &str) -> i32 {
 const TEXT_PT: i32 = 18;
 const INDEX_PT: i32 = 11;
 const PAD: i32 = 6;
-const CELL_PAD: i32 = 8;
-const HEIGHT: i32 = 36;
+const CELL_PAD: i32 = 7;
+const HEIGHT: i32 = 34;
 
 fn page_label(p: &Panel) -> Option<String> {
     (p.pages > 1).then(|| format!("{}/{}", p.page + 1, p.pages))
@@ -202,13 +211,14 @@ fn paint(hwnd: HWND) {
                 bg,
             );
             let _ = DeleteObject(HGDIOBJ(bg.0));
-            let pen = CreatePen(PS_SOLID, 1, t.border);
+            let pen = CreatePen(PS_SOLID, scale(1, dpi).max(1), t.border);
             let old_pen = SelectObject(dc, HGDIOBJ(pen.0));
             let hollow = windows::Win32::Graphics::Gdi::GetStockObject(
                 windows::Win32::Graphics::Gdi::NULL_BRUSH,
             );
             let old_brush = SelectObject(dc, hollow);
-            let radius = scale(8, dpi);
+            // GDI takes the ellipse diameter, whereas AppKit takes a radius.
+            let radius = scale(16, dpi);
             let _ = RoundRect(dc, 0, 0, w, h, radius, radius);
             SelectObject(dc, old_brush);
             SelectObject(dc, old_pen);
@@ -232,7 +242,7 @@ fn paint(hwnd: HWND) {
                     let old = SelectObject(dc, HGDIOBJ(brush.0));
                     let pen = CreatePen(PS_SOLID, 1, t.selected);
                     let old_pen = SelectObject(dc, HGDIOBJ(pen.0));
-                    let r = scale(6, dpi);
+                    let r = scale(10, dpi);
                     let _ = RoundRect(dc, cell.left, cell.top, cell.right, cell.bottom, r, r);
                     SelectObject(dc, old_pen);
                     SelectObject(dc, old);
