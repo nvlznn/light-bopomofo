@@ -92,9 +92,17 @@ fn long_input_is_fast() {
         .collect();
     times.sort();
     let (median, p95) = (times[times.len() / 2], times[times.len() * 95 / 100]);
+    // The 10 ms budget is for users' machines (about 1 ms on an M-series
+    // Mac). Hosted CI runners are shared, throttled VMs measured 5–6× slower
+    // and noisy, so there the check only guards against large regressions.
+    let budget = if std::env::var_os("CI").is_some() {
+        Duration::from_millis(30)
+    } else {
+        Duration::from_millis(10)
+    };
     assert!(
-        p95 < Duration::from_millis(10),
-        "median {median:?}, p95 {p95:?}"
+        p95 < budget,
+        "median {median:?}, p95 {p95:?} (budget {budget:?})"
     );
 }
 
