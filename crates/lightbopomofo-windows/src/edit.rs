@@ -77,14 +77,21 @@ fn cursor_after(ec: u32, context: &ITfContext, range: &ITfRange) -> Result<()> {
     }
 }
 
-/// The current selection (where typing goes).
+/// The current selection (where typing goes); the end of the document when
+/// the application reports none.
 fn selection(ec: u32, context: &ITfContext) -> Result<ITfRange> {
     unsafe {
         let mut selection = [TF_SELECTION::default()];
         let mut fetched = 0;
-        context.GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut fetched)?;
+        let got = context.GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut fetched);
         let range = ManuallyDrop::take(&mut selection[0].range);
-        range.ok_or_else(|| E_FAIL.into())
+        match range {
+            Some(range) if got.is_ok() && fetched > 0 => Ok(range),
+            _ => {
+                let end = context.GetEnd(ec)?;
+                Ok(end)
+            }
+        }
     }
 }
 

@@ -149,7 +149,15 @@ impl TextService_Impl {
         };
         let result = self.composer.borrow_mut().handle(&mut engine, key);
         drop(engine);
-        self.render(context, result.commit)?;
+        if let Err(e) = self.render(context, result.commit) {
+            // The application refused the edit: give up this composition and
+            // let it have the key, rather than swallowing keys silently.
+            log::error(&format!("edit failed: {e}"));
+            self.composer.borrow_mut().reset();
+            self.composition.forget();
+            candidates::hide();
+            return Ok(false);
+        }
         Ok(result.handled)
     }
 
