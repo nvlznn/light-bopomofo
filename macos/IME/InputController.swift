@@ -1,4 +1,3 @@
-import Carbon
 import Cocoa
 import InputMethodKit
 import os
@@ -23,6 +22,8 @@ enum SharedEngine {
 final class InputController: IMKInputController {
     private lazy var composer: Composer? = SharedEngine.engine.map(Composer.init)
     private var showingMarkedText = false
+    /// A commit the system asked for, waiting to see if deactivateServer follows.
+    private var pendingCommit: (work: DispatchWorkItem, client: IMKTextInput)?
 
     private static let punctuation: [String: String] = [
         "<": "，", ">": "。", "?": "？", "!": "！", ":": "：",
@@ -36,6 +37,7 @@ final class InputController: IMKInputController {
         guard let event, event.type == .keyDown, let composer,
               let client = sender as? IMKTextInput
         else { return false }
+        commitPending()
         let result = composer.handle(Self.key(for: event, composing: !composer.isEmpty))
         if !result.commit.isEmpty {
             client.insertText(result.commit, replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -45,26 +47,38 @@ final class InputController: IMKInputController {
         return result.handled
     }
 
+    /// The system asks to commit both when the app ends the composition (a
+    /// click elsewhere…) and right before deactivateServer when the user
+    /// switches input method (or app). So the commit waits a moment: if
+    /// deactivateServer follows, the bopomofo not chosen yet is dropped.
     override func commitComposition(_ sender: Any!) {
         guard let composer, let client = sender as? IMKTextInput, !composer.isEmpty else { return }
-        let text = composer.commitAll()
-        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-        showingMarkedText = false
-        render(client)
+        pendingCommit?.work.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.commitPending() }
+        pendingCommit = (work, client)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
     override func deactivateServer(_ sender: Any!) {
-        // Switching apps commits; switching to another input method drops
-        // the bopomofo not chosen yet.
-        if Self.isSelected {
-            commitComposition(sender)
-        } else if let composer, !composer.isEmpty, let client = sender as? IMKTextInput {
-            log.info("input method switched: composition dropped")
+        pendingCommit?.work.cancel()
+        pendingCommit = nil
+        if let composer, !composer.isEmpty, let client = sender as? IMKTextInput {
+            log.info("deactivated: composition dropped")
             composer.reset()
             render(client)
         }
         CandidatePanel.shared.hide()
         super.deactivateServer(sender)
+    }
+
+    private func commitPending() {
+        guard let (work, client) = pendingCommit else { return }
+        work.cancel()
+        pendingCommit = nil
+        guard let composer, !composer.isEmpty else { return }
+        client.insertText(composer.commitAll(), replacementRange: NSRange(location: NSNotFound, length: 0))
+        showingMarkedText = false
+        render(client)
     }
 
     private func render(_ client: IMKTextInput) {
@@ -88,16 +102,6 @@ final class InputController: IMKInputController {
         var caret = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &caret)
         CandidatePanel.shared.show(composer.candidates.map(\.text), selected: composer.selected, caret: caret)
-    }
-
-    /// Whether this input method is still the selected one (not when the
-    /// user switched to another).
-    static var isSelected: Bool {
-        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-              let raw = TISGetInputSourceProperty(source, kTISPropertyBundleID)
-        else { return true }
-        let id = Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
-        return id == Bundle.main.bundleIdentifier
     }
 
     /// Number keys 1–9 by key code (the keypad's are separate keys).
