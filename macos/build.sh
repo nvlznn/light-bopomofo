@@ -56,6 +56,8 @@ mkdir -p "$APP/Contents/MacOS"
 lipo -create "$WORK/app-arm64" "$WORK/app-x86_64" -output "$APP/Contents/MacOS/LightBopomofo"
 cp "$ROOT/macos/App/Info.plist" "$APP/Contents/"
 cp -R "$ROOT/macos/App/Resources/" "$APP/Contents/Resources/"
+# The tutorial's backdrop (shared with Windows, which builds it into the exe).
+cp "$ROOT/assets/tutorial-background.jpg" "$APP/Contents/Resources/"
 # The background update check (Updater.swift).
 mkdir -p "$APP/Contents/Library/LaunchAgents"
 cp "$ROOT"/macos/App/LaunchAgents/*.plist "$APP/Contents/Library/LaunchAgents/"

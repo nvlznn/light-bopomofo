@@ -7,6 +7,7 @@ pub mod engine;
 pub mod history;
 pub mod lexicon;
 pub mod release;
+pub mod tutorial;
 
 pub use composer::{Composer, Key, KeyResult};
 pub use engine::{Candidate, Engine};

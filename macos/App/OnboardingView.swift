@@ -15,13 +15,13 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                MovingBackdrop()
+                Backdrop()
                 Card(tutor: tutor, onFinish: onFinish)
                     .frame(width: cardSize.width, height: cardSize.height)
                     .background {
                         // Frosted glass: the same backdrop, blurred and tinted.
                         ZStack {
-                            MovingBackdrop()
+                            Backdrop()
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .blur(radius: 44)
                             Color.black.opacity(0.32)
@@ -143,52 +143,34 @@ private final class Tutor: ObservableObject {
 
 private enum Palette {
     static let cream = Color(red: 0.97, green: 0.91, blue: 0.74)
-    static let dusk = Color(red: 0.47, green: 0.44, blue: 0.60)
-    static let rose = Color(red: 0.84, green: 0.60, blue: 0.56)
-    static let ember = Color(red: 0.96, green: 0.52, blue: 0.22)
+    static let sky = Color(red: 0.16, green: 0.52, blue: 0.80)
 }
 
-private struct MovingBackdrop: View {
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            Backdrop(time: context.date.timeIntervalSinceReferenceDate)
-        }
-    }
-}
-
-/// Dusk gradient with drifting light and a large 輕 behind the card.
+/// The sky over the hill, filling the window: cropped to keep the clouds,
+/// the stars and the top of the hill in view.
 private struct Backdrop: View {
-    let time: Double
+    private static let image = Bundle.main.url(forResource: "tutorial-background", withExtension: "jpg")
+        .flatMap(NSImage.init(contentsOf:))
+    /// Where the window sits along the picture's height when it is cropped.
+    private static let focus: CGFloat = 0.6
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                stops: [
-                    .init(color: Palette.dusk, location: 0),
-                    .init(color: Palette.rose, location: 0.55),
-                    .init(color: Palette.ember, location: 1),
-                ],
-                startPoint: .top, endPoint: .bottom)
-            Circle()
-                .fill(Color(red: 1, green: 0.78, blue: 0.55).opacity(0.75))
-                .frame(width: 620, height: 620)
-                .blur(radius: 110)
-                .offset(x: 250 + 40 * sin(time / 7), y: 260 + 24 * cos(time / 9))
-            Circle()
-                .fill(Color(red: 0.36, green: 0.34, blue: 0.56).opacity(0.7))
-                .frame(width: 560, height: 560)
-                .blur(radius: 120)
-                .offset(x: -280 + 36 * cos(time / 8), y: -300 + 20 * sin(time / 11))
-            Text("輕")
-                .font(.system(size: 660, weight: .black, design: .serif))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color(white: 0.05), Color(red: 0.16, green: 0.07, blue: 0.04)],
-                        startPoint: .top, endPoint: .bottom))
-                .offset(x: -170, y: 90)
-                .fixedSize()
+        GeometryReader { geometry in
+            let size = geometry.size
+            if let image = Backdrop.image, image.size.width > 0, image.size.height > 0 {
+                let scale = max(size.width / image.size.width, size.height / image.size.height)
+                let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: drawn.width, height: drawn.height)
+                    .position(
+                        x: size.width / 2,
+                        y: size.height / 2 - (drawn.height - size.height) * (Backdrop.focus - 0.5))
+            } else {
+                Palette.sky
+            }
         }
-        .drawingGroup()
     }
 }
 
@@ -383,7 +365,8 @@ private struct PracticeStep: View {
         ("每個字\n只打第一個注音", "ㄋㄏㄇ", "打 ㄋㄏㄇ，按 Enter 送出「你好嗎」。"),
         ("按 Tab 選字", "Tab", "打 ㄇㄊ，按 Tab 選「明天」。Shift + Tab 往回。"),
         ("找不到？\n按 ] 翻頁", "[ ]", "打 ㄏㄏ，到下一頁找「還好」。[ 回上一頁。"),
-        ("選過的字\n會排到前面", "記住了", "再打一次 ㄏㄏ，「還好」已經排在第一個。"),
+        ("整句不對？\n分段選", "分段", "打 ㄇㄇㄒㄒㄋ，先選「媽媽」，再選「謝謝你」。"),
+        ("輕注音\n記住你的選擇", "記住了", "再打一次 ㄇㄇㄒㄒㄋ，「媽媽謝謝你」已經排在第一個。"),
     ]
 
     var body: some View {
@@ -544,11 +527,13 @@ private struct KeyGuide: View {
     var body: some View {
         let progress = practice.progress
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                ForEach(Array(practice.plan.enumerated()), id: \.offset) { i, key in
+            HStack(spacing: 6) {
+                ForEach(KeyGuide.runs(practice.plan), id: \.start) { run in
+                    let end = run.start + run.count
                     let state: Keycap.State =
-                        progress.map { i < $0 ? .done : i == $0 ? .next : .waiting } ?? .waiting
-                    Keycap(key: key, state: state)
+                        progress.map { end <= $0 ? .done : run.start <= $0 ? .next : .waiting } ?? .waiting
+                    let left = end - max(progress ?? run.start, run.start)
+                    Keycap(key: run.key, state: state, count: state == .done ? run.count : left)
                 }
             }
             Group {
@@ -570,6 +555,21 @@ private struct KeyGuide: View {
             .frame(height: 30, alignment: .leading)
         }
     }
+
+    /// The plan with repeats of a key (Tab Tab Tab) folded into one.
+    static func runs(_ plan: [Key]) -> [(key: Key, start: Int, count: Int)] {
+        var runs: [(key: Key, start: Int, count: Int)] = []
+        for (i, key) in plan.enumerated() {
+            if case .symbol = key {
+                runs.append((key, i, 1))
+            } else if let last = runs.last, last.key == key {
+                runs[runs.count - 1].count += 1
+            } else {
+                runs.append((key, i, 1))
+            }
+        }
+        return runs
+    }
 }
 
 private struct Keycap: View {
@@ -577,19 +577,25 @@ private struct Keycap: View {
 
     let key: Key
     let state: State
+    var count = 1
 
     var body: some View {
         let (label, hint) = Keycap.labels(key)
         VStack(spacing: 1) {
-            Text(label).font(.system(size: 16, weight: .semibold))
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(label).font(.system(size: 16, weight: .semibold))
+                if count > 1 {
+                    Text("×\(count)").font(.system(size: 11, weight: .bold).monospacedDigit())
+                }
+            }
             if let hint {
                 Text(hint).font(.system(size: 9.5, weight: .semibold)).opacity(0.55)
             }
         }
         .foregroundStyle(state == .next ? .black : .white)
         .opacity(state == .done ? 0.35 : 1)
-        .frame(minWidth: 42)
-        .padding(.horizontal, 4)
+        .frame(minWidth: 36)
+        .padding(.horizontal, 3)
         .frame(height: 46)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)

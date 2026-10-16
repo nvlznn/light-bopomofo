@@ -243,11 +243,16 @@ do {
 do {
     let lexicon = CommandLine.arguments[1]
     let engine = Engine(lexiconPath: lexicon, historyPath: nil)!
+    func keys(_ symbols: String, _ then: [Key]) -> [Key] { symbols.map { Key.symbol($0) } + then }
+    check(engine.query("ㄇㄇㄒㄒㄋ").first?.text == "密碼謝謝你", "the whole comes out wrong at first")
     let plans: [[Key]] = [
-        [.symbol("ㄋ"), .symbol("ㄏ"), .symbol("ㄇ"), .commit],
-        [.symbol("ㄇ"), .symbol("ㄊ"), .next, .next, .commit],
-        [.symbol("ㄏ"), .symbol("ㄏ"), .pageNext, .next, .commit],
-        [.symbol("ㄏ"), .symbol("ㄏ"), .commit],
+        keys("ㄋㄏㄇ", [.commit]),
+        keys("ㄇㄊ", [.next, .next, .commit]),
+        keys("ㄏㄏ", [.pageNext, .next, .commit]),
+        // 媽媽 is 4th; then ㄒㄒㄋ is 謝謝你 first.
+        keys("ㄇㄇㄒㄒㄋ", [.next, .next, .next, .commit, .commit]),
+        // Learned from the pieces: first as a whole.
+        keys("ㄇㄇㄒㄒㄋ", [.commit]),
     ]
     for (lesson, expected) in zip(Lesson.tutorial, plans) {
         let p = Practice(lesson, engine: engine)
@@ -270,9 +275,17 @@ do {
     p.handle(.symbol("ㄊ"))
     p.handle(.commit)
     check(p.wentWrong && !p.isDone, "committed the wrong word")
-    check(p.handle(.backspace) && p.committed.count == 1, "backspace deletes committed text")
     p.restart()
     check(p.nextKey == .symbol("ㄇ") && !p.wentWrong, "restart")
+
+    // A wrong piece: Esc, then start over.
+    let q = Practice(Lesson.tutorial[3], engine: Engine(lexiconPath: lexicon, historyPath: nil)!)
+    for s in "ㄇㄇㄒㄒㄋ" { q.handle(.symbol(s)) }
+    q.handle(.next)
+    q.handle(.commit)
+    check(q.committed == "密碼" && q.nextKey == .escape, "wrong piece asks for Esc: \(q.committed)")
+    q.handle(.escape)
+    check(q.wentWrong, "Esc leaves the wrong piece: start over")
 }
 
 // Which release is newer (UpdateCheck).
