@@ -29,6 +29,8 @@
   --shadow-sm: 0 1px 1px rgba(16, 24, 40, .04), 0 4px 14px rgba(16, 24, 40, .05);
   --spring: cubic-bezier(.34, 1.56, .64, 1);
   --ease: cubic-bezier(.22, 1, .36, 1);
+  /* Even travel for things that move across: no first-frame leap. */
+  --glide: cubic-bezier(.4, 0, .2, 1);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   color-scheme: light;
 }
@@ -46,12 +48,12 @@ button { font: inherit; color: inherit; }
 
 /* Soft organic background */
 .sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-.sky i { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .75; animation: drift 38s var(--ease) infinite alternate; }
-.sky i:nth-child(1) { width: 62vmax; height: 62vmax; left: -18vmax; top: -22vmax; background: #c6e6ff; }
-.sky i:nth-child(2) { width: 50vmax; height: 50vmax; right: -16vmax; top: 8vmax; background: #d4f5ea; animation-duration: 46s; }
-.sky i:nth-child(3) { width: 46vmax; height: 46vmax; left: 18vmax; top: 54vmax; background: #e6e0ff; animation-duration: 52s; }
-.sky i:nth-child(4) { width: 36vmax; height: 36vmax; right: 6vmax; bottom: -14vmax; background: #ffe7d8; animation-duration: 42s; }
-@keyframes drift { to { transform: translate3d(6vmax, 4vmax, 0) scale(1.08); } }
+/* Static soft blobs drawn as gradients: no live blur, nothing for the glass above to re-blur. */
+.sky i { position: absolute; border-radius: 50%; }
+.sky i:nth-child(1) { width: 80vmax; height: 80vmax; left: -28vmax; top: -32vmax; background: radial-gradient(closest-side, rgba(198,230,255,.95), rgba(198,230,255,0)); }
+.sky i:nth-child(2) { width: 66vmax; height: 66vmax; right: -24vmax; top: 0; background: radial-gradient(closest-side, rgba(212,245,234,.9), rgba(212,245,234,0)); }
+.sky i:nth-child(3) { width: 62vmax; height: 62vmax; left: 10vmax; top: 46vmax; background: radial-gradient(closest-side, rgba(230,224,255,.9), rgba(230,224,255,0)); }
+.sky i:nth-child(4) { width: 52vmax; height: 52vmax; right: -2vmax; bottom: -22vmax; background: radial-gradient(closest-side, rgba(255,231,216,.9), rgba(255,231,216,0)); }
 
 .glass {
   background: var(--glass);
@@ -114,10 +116,12 @@ button { font: inherit; color: inherit; }
 
 /* MacBook */
 .mac { width: 100%; max-width: 800px; }
+@media (max-width: 520px) { .mac { width: 86%; } }
 .lid {
-  position: relative; padding: 1.8% 1.8% 2.4%; border-radius: 22px 22px 6px 6px; background: #0b0b0d;
-  box-shadow: inset 0 0 0 1.5px #3b3b40, inset 0 0 0 3px #161618, 0 40px 70px -30px rgba(16,24,40,.45), var(--shadow);
+  position: relative; padding: 1.8% 1.8% 2.6%; border-radius: 22px 22px 8px 8px; background: #0b0b0d;
+  box-shadow: 0 0 0 2px #c9ccd1, 0 0 0 3px #a9adb3, inset 0 0 0 1.5px #2a2a2e, 0 30px 60px -30px rgba(16,24,40,.4), var(--shadow);
 }
+.hinge { width: 74%; height: clamp(6px, 1.4vw, 12px); margin: 0 auto; border-radius: 0 0 6px 6px; background: linear-gradient(#1a1a1c, #3c3c40 55%, #5a5a5f); }
 .display {
   position: relative; aspect-ratio: 16 / 10; border-radius: 6px; overflow: hidden; container-type: inline-size; text-align: left;
   background:
@@ -137,43 +141,33 @@ button { font: inherit; color: inherit; }
 .menubar .sp { flex: 1; }
 .menubar .ime { font-weight: 700; padding: 0 .35em; border: 1.5px solid currentColor; border-radius: .3em; line-height: 1.25; }
 @container (max-width: 420px) { .menubar .opt { display: none; } }
-.notes {
-  position: absolute; left: 7%; right: 7%; top: calc(clamp(16px, 3.6cqw, 28px) + 4.5%); bottom: 16%;
-  display: flex; background: #fff; border-radius: clamp(7px, 1.5cqw, 12px);
-  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 22px 50px rgba(16,24,40,.22);
+/* A blank text editor window: nothing to look at but the typing */
+.editor {
+  position: absolute; left: 9%; right: 9%; top: calc(clamp(16px, 3.6cqw, 28px) + 4%); bottom: 15%;
+  display: flex; flex-direction: column; background: #fff; border-radius: clamp(7px, 1.4cqw, 12px); color: #1d1d1f;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.22), 0 22px 50px rgba(16,24,40,.25);
 }
-.notes .side {
-  width: 25%; flex: none; padding: clamp(6px, 1.6cqw, 14px) clamp(5px, 1.2cqw, 10px); background: #f2f1f6;
-  border-radius: clamp(7px, 1.5cqw, 12px) 0 0 clamp(7px, 1.5cqw, 12px); border-right: 1px solid rgba(0,0,0,.06);
-  font-size: clamp(8px, 1.55cqw, 12px); color: #3c3c43;
+.editor .titlebar {
+  position: relative; flex: none; height: clamp(18px, 4cqw, 32px); display: flex; align-items: center; justify-content: center;
+  background: #f6f6f6; border-bottom: 1px solid rgba(0,0,0,.08); border-radius: clamp(7px, 1.4cqw, 12px) clamp(7px, 1.4cqw, 12px) 0 0;
+  font-size: clamp(7px, 1.4cqw, 12px); font-weight: 600; color: #4d4d52;
 }
-.tl { display: flex; gap: clamp(3px, .8cqw, 7px); margin-bottom: clamp(8px, 2.2cqw, 18px); }
-.tl i { width: clamp(6px, 1.3cqw, 11px); height: clamp(6px, 1.3cqw, 11px); border-radius: 50%; background: #ff5f57; }
+.tl { position: absolute; left: clamp(6px, 1.4cqw, 12px); top: 50%; transform: translateY(-50%); display: flex; gap: clamp(3px, .75cqw, 7px); }
+.tl i { width: clamp(6px, 1.2cqw, 11px); height: clamp(6px, 1.2cqw, 11px); border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
 .tl i:nth-child(2) { background: #febc2e; }
 .tl i:nth-child(3) { background: #28c840; }
-.notes .side p { margin: 0 0 2px; padding: .35em .6em; border-radius: .5em; display: flex; justify-content: space-between; }
-.notes .side p.on { background: rgba(0,0,0,.08); font-weight: 600; color: #1d1d1f; }
-.notes .side small { color: #8e8e93; }
-.notes .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.notes .tb {
-  height: clamp(22px, 5cqw, 40px); flex: none; display: flex; align-items: center; justify-content: center;
-  border-bottom: 1px solid rgba(0,0,0,.06); font-size: clamp(8px, 1.45cqw, 11px); color: #8e8e93;
-}
-.notes .doc { flex: 1; padding: clamp(6px, 1.8cqw, 16px) clamp(10px, 2.6cqw, 22px); font-size: clamp(13px, 2.6cqw, 20px); line-height: 1.7; }
-.notes .doc p { margin: 0; min-height: 1.7em; }
-@container (max-width: 480px) { .notes .side { display: none; } .notes { left: 5%; right: 5%; } .notes .main .tb { border-radius: clamp(7px, 1.5cqw, 12px) clamp(7px, 1.5cqw, 12px) 0 0; } }
+/* Clipped top and bottom only, so the candidate window can still overhang the sides. */
+.editor .doc { flex: 1; min-height: 0; position: relative; clip-path: inset(0 -100vw); padding: clamp(8px, 2cqw, 18px) clamp(12px, 3cqw, 26px); font-size: clamp(13px, 2.5cqw, 20px); line-height: 1.65; }
+.editor .flow { position: relative; transition: transform .5s var(--glide); }
+.editor .doc p { margin: 0; min-height: 1.65em; }
 .dock {
-  position: absolute; bottom: 2%; left: 50%; transform: translateX(-50%); display: flex; gap: .9cqw; padding: .8cqw;
-  border-radius: 1.9cqw; background: rgba(255,255,255,.38); border: 1px solid rgba(255,255,255,.55);
+  position: absolute; bottom: 1.8%; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: .7cqw; padding: .7cqw .8cqw;
+  border-radius: 1.8cqw; background: rgba(255,255,255,.36); border: 1px solid rgba(255,255,255,.55);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
 }
-.dock i { width: 5.2cqw; height: 5.2cqw; border-radius: 1.25cqw; background: linear-gradient(160deg, #6ac4ff, #2a7bf5); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
-.dock i:nth-child(2) { background: linear-gradient(160deg, #fff7c2, #ffd23f); }
-.dock i:nth-child(3) { background: linear-gradient(160deg, #7ef0a0, #22b85a); }
-.dock i:nth-child(4) { background: linear-gradient(160deg, #ffffff, #e3e3e8); }
-.dock i:nth-child(5) { background: linear-gradient(160deg, #ffb2a6, #ff5e57); }
-.dock i:nth-child(6) { background: linear-gradient(160deg, #d7c4ff, #8a5cf6); }
-.dock i:nth-child(7) { background: linear-gradient(160deg, #b8bcc4, #7d828c); }
+.dock span { position: relative; width: 5cqw; height: 5cqw; display: block; }
+.dock svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.2)); }
+.dock span.run::after { content: ""; position: absolute; left: 50%; bottom: -.55cqw; width: .45cqw; height: .45cqw; margin-left: -.225cqw; border-radius: 50%; background: rgba(0,0,0,.55); }
 .comp { position: relative; display: inline-block; }
 .comp u { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1.5px; letter-spacing: .04em; }
 .caret { display: inline-block; width: 2px; height: 1.15em; background: var(--accent); vertical-align: -.2em; margin-left: 1px; animation: blink 1.05s steps(1) infinite; }
@@ -183,24 +177,39 @@ button { font: inherit; color: inherit; }
   background: rgba(255,255,255,.97); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(16,24,40,.16); font-size: clamp(11px, 2.05cqw, 15px); white-space: nowrap; line-height: 1.5;
 }
-.cpanel span { padding: 2px 8px; border-radius: 6px; }
-.cpanel span sup { font-size: 10px; color: var(--ink3); margin-right: 3px; vertical-align: 2px; }
-.cpanel span.on { background: var(--accent); color: #fff; }
-.cpanel span.on sup { color: rgba(255,255,255,.8); }
-/* Aluminium deck, tilted away like a laptop seen from the front */
-/* Wider at the front edge than at the hinge, as seen from the front */
-.deck-wrap { margin: 0 -3%; }
+.cpanel .items, .cpanel .ghost { display: flex; gap: 1px; white-space: nowrap; }
+.cpanel .items span, .cpanel .ghost span { padding: 2px 8px; }
+.cpanel .items sup, .cpanel .ghost sup { font-size: 10px; color: var(--ink3); margin-right: 3px; vertical-align: 2px; }
+/* The selection always travels: a blue window gliding over the candidates.
+   Inside it a white copy of the row moves the opposite way, so the white
+   text stays on the dark text below it while the window moves or resizes. */
+.cpanel .hl { position: absolute; top: 4px; bottom: 4px; left: 0; z-index: 1; overflow: hidden; border-radius: 6px; background: var(--accent); transition: transform .22s var(--glide), width .22s var(--glide); }
+.cpanel .ghost { position: absolute; left: 0; top: 0; color: #fff; transition: transform .22s var(--glide); }
+.cpanel .ghost sup { color: rgba(255,255,255,.8); }
+.cpanel .hl.jump, .cpanel .hl.jump .ghost { transition: none; }
+/* Appears at once like the real window; fades out quickly on commit. */
+.cpanel.hide { opacity: 0; pointer-events: none; transition: opacity .15s ease-out; }
+.caret.solid { animation: none; }
+.lines p { transition: opacity .45s var(--ease); }
+.lines.fade p { opacity: 0; }
+.live .big.tick { animation: soft .3s var(--ease); }
+@keyframes soft { from { opacity: .45; filter: blur(1.5px); } }
+/* Aluminium base tilted back in 3D like a laptop seen from the front: the
+   keyboard narrows towards the hinge. The script trims the layout height the
+   tilt frees up, so nothing gaps below. */
+.deck-wrap { perspective: 1100px; perspective-origin: 50% 0; }
+@media (max-width: 600px) { .deck-wrap { perspective: 900px; } }
 .deck {
-  container-type: inline-size; clip-path: polygon(2.83% 0, 97.17% 0, 100% 100%, 0 100%);
-  padding: 2.4% 7% 2.2%;
-  background: linear-gradient(#cfd2d7, #e3e5e9 6%, #e9ebee 70%, #dfe1e5);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+  container-type: inline-size; transform: rotateX(38deg); transform-origin: 50% 0;
+  padding: 3% 6.5% 0; border-radius: 4px 4px 22px 22px / 4px 4px 16px 16px;
+  background: linear-gradient(#d3d6da, #e6e8eb 8%, #eceef0 75%, #e2e4e7);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 30px 40px -18px rgba(16,24,40,.35);
 }
 .lip {
-  height: clamp(8px, 1.8vw, 16px); margin: 0 -3%; border-radius: 0 0 18px 18px / 0 0 12px 12px; position: relative;
-  background: linear-gradient(#d6d9dd, #b9bdc3 60%, #a3a7ad); box-shadow: 0 18px 30px -10px rgba(16,24,40,.3);
+  height: clamp(10px, 2.4cqw, 20px); margin: 3% -7% 0; border-radius: 0 0 22px 22px / 0 0 16px 16px; position: relative;
+  background: linear-gradient(#cdd0d5, #b3b7bd 60%, #9ea2a8);
 }
-.lip::before { content: ""; position: absolute; left: 50%; top: 0; width: 16%; height: 45%; transform: translateX(-50%); border-radius: 0 0 8px 8px; background: rgba(0,0,0,.08); }
+.lip::before { content: ""; position: absolute; left: 50%; top: 0; width: 16%; height: 40%; transform: translateX(-50%); border-radius: 0 0 8px 8px; background: rgba(0,0,0,.09); }
 .mkb { padding: 1.2cqw; border-radius: 1.4cqw; background: #c4c7cc; box-shadow: inset 0 1px 2px rgba(0,0,0,.18); }
 .mkb .kr { display: flex; gap: .8cqw; margin-top: .8cqw; }
 .mkb .kr:first-child { margin-top: 0; }
@@ -221,7 +230,7 @@ button { font: inherit; color: inherit; }
 .mkb .arrows .k:nth-child(n+2) { grid-row: 2; }
 @container (max-width: 460px) { .mkb .k i { display: none; } }
 .trackpad {
-  width: 42%; aspect-ratio: 2.1; margin: 3.2% auto 0; border-radius: clamp(5px, 1.4cqw, 12px);
+  width: 40%; aspect-ratio: 2; margin: 3.4% auto 0; border-radius: clamp(5px, 1.4cqw, 12px);
   background: linear-gradient(#e4e6ea, #dadde1); box-shadow: inset 0 0 0 1px rgba(0,0,0,.07), inset 0 1px 1px rgba(0,0,0,.05);
 }
 .k.down { transform: translateY(1px) scale(.95); background: #38383c !important; box-shadow: 0 0 0 1.5px rgba(80,160,255,.85), 0 0 14px rgba(80,160,255,.45); }
@@ -232,8 +241,7 @@ button { font: inherit; color: inherit; }
 .band {
   position: relative; margin-top: 72px; padding: 72px 0 80px;
   border-radius: 50% 50% 0 0 / 56px 56px 0 0;
-  background: linear-gradient(to bottom, rgba(255,255,255,.55), rgba(255,255,255,.25));
-  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  background: linear-gradient(to bottom, rgba(255,255,255,.62), rgba(255,255,255,.3));
   border-top: 1px solid var(--glass-edge);
 }
 @media (min-width: 768px) { .band { border-radius: 50% 50% 0 0 / 96px 96px 0 0; padding: 100px 0 100px; } }
@@ -284,20 +292,31 @@ button { font: inherit; color: inherit; }
 .pad .line { font-size: 26px; min-height: 1.6em; }
 .pad .line u { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1.5px; letter-spacing: .04em; }
 .pad .ask { font-size: 14px; color: var(--ink2); margin: 10px 0 14px; min-height: 1.5em; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.want { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.want .tag { font-size: 13px; font-weight: 600; color: var(--ink2); background: rgba(118,118,128,.12); padding: 2px 10px; border-radius: 10px; }
+.want b { font-size: 26px; font-weight: 700; letter-spacing: .04em; }
+.pad .line .ok { color: var(--ok); font-weight: 600; }
+.guess { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 2.2em; margin-top: 6px; font-size: 15px; color: var(--ink2); }
+.guess s { color: #c62828; font-size: 22px; font-weight: 600; text-decoration-thickness: 2px; }
+.guess .good { color: var(--ok); font-size: 22px; font-weight: 700; }
+.badge { font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
+.badge.bad { background: rgba(198,40,40,.1); color: #c62828; }
+.badge.good { background: rgba(23,128,61,.12); color: var(--ok); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; position: relative; }
 .chip {
   border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 8px 14px; font-size: 17px; cursor: pointer;
-  transition: transform .6s var(--spring), box-shadow .3s, background .2s; box-shadow: var(--shadow-sm);
+  transition: transform .2s var(--ease), box-shadow .3s, background .3s, color .3s; box-shadow: var(--shadow-sm);
 }
 .chip sup { font-size: 11px; color: var(--ink3); margin-right: 4px; }
 .chip:hover { transform: translateY(-2px); }
-.chip.first { background: var(--accent); color: #fff; border-color: transparent; }
-.chip.first sup { color: rgba(255,255,255,.8); }
+.chip.wrong { background: #fff5f5; color: #c62828; border-color: rgba(198,40,40,.35); }
+.chip.wrong sup { color: rgba(198,40,40,.65); }
+.chip.right { background: var(--ok); color: #fff; border-color: transparent; }
+.chip.right sup { color: rgba(255,255,255,.85); }
 .chip.target { box-shadow: 0 0 0 3px rgba(0,102,214,.35); animation: ring 1.6s var(--ease) infinite; }
 @keyframes ring { 50% { box-shadow: 0 0 0 7px rgba(0,102,214,.08); } }
 .chip.nope { animation: shake .4s; }
 @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
-.chip.enter { animation: pop .6s var(--spring); }
 .toast {
   position: absolute; left: 50%; bottom: 22px; transform: translate(-50%, 20px) scale(.9); opacity: 0;
   padding: 9px 18px; border-radius: 20px; background: rgba(29,29,31,.88); color: #fff; font-size: 14px; white-space: nowrap;
@@ -412,20 +431,20 @@ footer a { color: var(--ink2); }
         <div class="lid"><div class="display">
           <div class="notch"></div>
           <div class="menubar">
-            <svg><use href="#i-apple"/></svg><b>備忘錄</b><span>檔案</span><span>編輯</span><span class="opt">格式</span><span class="opt">顯示方式</span>
+            <svg><use href="#i-apple"/></svg><b>文字編輯</b><span>檔案</span><span>編輯</span><span class="opt">格式</span><span class="opt">顯示方式</span>
             <span class="sp"></span>
             <span class="ime" title="輕注音">輕</span>
             <svg viewBox="0 0 24 24" class="opt"><path fill="currentColor" d="M12 18.5a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2zm-4.6-3.1a6.6 6.6 0 0 1 9.2 0l-1.5 1.5a4.5 4.5 0 0 0-6.2 0zM4.2 12.2a11 11 0 0 1 15.6 0l-1.5 1.5a8.9 8.9 0 0 0-12.6 0zM1 9a15.6 15.6 0 0 1 22 0l-1.5 1.5a13.5 13.5 0 0 0-19 0z"/></svg>
             <span id="m-clock"></span>
           </div>
-          <div class="notes">
-            <div class="side"><div class="tl"><i></i><i></i><i></i></div><p class="on">備忘錄<small>12</small></p><p>待辦事項<small>3</small></p><p>最近刪除</p></div>
-            <div class="main"><div class="tb" id="m-date"></div><div class="doc" id="m-doc"></div></div>
+          <div class="editor">
+            <div class="titlebar"><div class="tl"><i></i><i></i><i></i></div>未命名</div>
+            <div class="doc" id="m-doc"></div>
           </div>
-          <div class="dock"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="dock" id="m-dock"></div>
         </div></div>
-        <div class="deck-wrap"><div class="deck"><div class="mkb" id="m-kb"></div><div class="trackpad"></div></div></div>
-        <div class="lip"></div>
+        <div class="hinge"></div>
+        <div class="deck-wrap" id="deck-wrap"><div class="deck"><div class="mkb" id="m-kb"></div><div class="trackpad"></div><div class="lip"></div></div></div>
       </div>
     </div>
   </section>
@@ -464,7 +483,9 @@ footer a { color: var(--ink2); }
           <div class="ex" id="l-ex"></div>
         </div>
         <div class="pad glass">
+          <div class="want"><span class="tag">想打</span><b id="l-want"></b></div>
           <div class="line" id="l-line"></div>
+          <div class="guess" id="l-guess"></div>
           <p class="ask" id="l-ask" aria-live="polite"></p>
           <div class="chips" id="l-chips"></div>
           <button type="button" class="again" id="l-again">再試一次</button>
@@ -521,15 +542,9 @@ footer a { color: var(--ink2); }
         <details>
           <summary>按鍵</summary>
           <table class="keys">
-            <tr><td><kbd>Enter</kbd></td><td>送出選中的候選</td></tr>
             <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>Tab</kbd></td><td>選候選；可以只選前段，剩下的接著選</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>1</kbd>–<kbd>9</kbd></td><td>直接送出這一頁的第幾個</td></tr>
             <tr><td><kbd>[</kbd> <kbd>]</kbd> <kbd>PageUp</kbd> <kbd>PageDown</kbd></td><td>換頁</td></tr>
-            <tr><td><kbd>空白</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>6</kbd> <kbd>7</kbd></td><td>聲調 ˉ ˇ ˋ ˊ ˙（可省略）</td></tr>
-            <tr><td><kbd>Backspace</kbd> <kbd>Esc</kbd></td><td>刪一個注音／清空</td></tr>
-            <tr><td><kbd>Shift</kbd> + <kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd> <kbd>1</kbd> <kbd>;</kbd></td><td>，。？！：</td></tr>
-            <tr><td>第三頁第一個</td><td>你打的注音本身</td></tr>
-            <tr><td><kbd>Caps Lock</kbd></td><td>暫時打英文</td></tr>
           </table>
         </details>
         <details>
@@ -569,7 +584,7 @@ footer a { color: var(--ink2); }
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   function cands(s, src) { return ((src || C)[s] || '').split(' ').filter(Boolean); }
-  function human() { return 380 + Math.random() * 270 + (Math.random() < 0.15 ? 450 : 0); }
+  function human() { return 280 + Math.random() * 200 + (Math.random() < 0.1 ? 300 : 0); }
 
   // Pause demos while off screen or in a background tab.
   function watch(el, cb) {
@@ -598,93 +613,245 @@ footer a { color: var(--ink2); }
 
   function buildMacKB(el) {
     var lead = ['', 'tab', 'caps', 'shift'], tail = ['delete', '', 'return', 'shift'];
+    var named = { 'return': 'Enter', 'delete': 'Backspace', 'shift': 'Shift' };
+    function mod(name) {
+      return '<span class="k mod"' + (named[name] ? ' data-k="' + named[name] + '"' : '') + '>' + name + '</span>';
+    }
     var h = '<div class="kr fn"><span class="k mod">esc</span>';
     for (var f = 1; f <= 12; f++) h += '<span class="k">F' + f + '</span>';
     h += '<span class="k">●</span></div>';
     ROWS.forEach(function (row, i) {
       h += '<div class="kr">';
-      if (lead[i]) h += '<span class="k mod">' + lead[i] + '</span>';
+      if (lead[i]) h += mod(lead[i]);
       row.forEach(function (p) {
         h += '<span class="k" data-k="' + esc(p[0]) + '"><b>' + p[1] + '</b><i>' + esc(p[0].toUpperCase()) + '</i></span>';
       });
-      if (tail[i]) h += '<span class="k mod"' + (tail[i] === 'return' ? ' data-k="Enter"' : tail[i] === 'delete' ? ' data-k="Backspace"' : '') + '>' + tail[i] + '</span>';
+      // Only the left Shift lights up: typing uses one.
+      if (tail[i]) h += tail[i] === 'shift' ? '<span class="k mod">shift</span>' : mod(tail[i]);
       h += '</div>';
     });
     h += '<div class="kr"><span class="k mod">fn</span><span class="k mod">⌃</span><span class="k mod">⌥</span><span class="k mod">⌘</span><span class="k space" data-k=" "></span><span class="k mod">⌘</span><span class="k mod">⌥</span>' +
-      '<span class="arrows"><span class="k">▲</span><span class="k">◀</span><span class="k">▼</span><span class="k">▶</span></span></div>';
+      '<span class="arrows"><span class="k">▲</span><span class="k">◀</span><span class="k">▼</span><span class="k" data-k="ArrowRight">▶</span></span></div>';
     el.innerHTML = h;
   }
-  // Menu bar clock and note date follow the visitor's own clock.
+
+  // Dock: simplified, generic app icons (64×64).
+  var BG = '<rect width="64" height="64" rx="14" fill="';
+  var DOCK = [
+    '<defs><linearGradient id="d0" x2="0" y2="1"><stop offset="0" stop-color="#6fd0ff"/><stop offset="1" stop-color="#1e7ee6"/></linearGradient></defs>' + BG + 'url(#d0)"/><path d="M13 23a4 4 0 0 1 4-4h9l4 4h17a4 4 0 0 1 4 4v15a4 4 0 0 1-4 4H17a4 4 0 0 1-4-4z" fill="#fff"/>',
+    BG + '#fff"/><defs><linearGradient id="d1" x2="0" y2="1"><stop offset="0" stop-color="#5ac8fa"/><stop offset="1" stop-color="#1565c0"/></linearGradient></defs><circle cx="32" cy="32" r="23" fill="url(#d1)"/><path d="M45 19 35 35l-6-6z" fill="#ff3b30"/><path d="M19 45l10-16 6 6z" fill="#fff"/>',
+    '<defs><linearGradient id="d2" x2="0" y2="1"><stop offset="0" stop-color="#67f07f"/><stop offset="1" stop-color="#0dbb3b"/></linearGradient></defs>' + BG + 'url(#d2)"/><ellipse cx="32" cy="30" rx="19" ry="15" fill="#fff"/><path d="M18 40c-1 4-3 6-5 7 5 0 9-2 11-4z" fill="#fff"/>',
+    '<defs><linearGradient id="d3" x2="0" y2="1"><stop offset="0" stop-color="#6cc4ff"/><stop offset="1" stop-color="#1a6fe0"/></linearGradient></defs>' + BG + 'url(#d3)"/><rect x="13" y="20" width="38" height="25" rx="3" fill="#fff"/><path d="M14 22l18 13 18-13" fill="none" stroke="#1a6fe0" stroke-width="2.5" stroke-linejoin="round"/>',
+    BG + '#fff"/>' + ['#ff9500', '#ffcc00', '#34c759', '#30b0c7', '#007aff', '#af52de', '#ff2d55', '#ff3b30'].map(function (c, i) {
+      return '<ellipse cx="32" cy="20" rx="6.5" ry="11" fill="' + c + '" opacity=".85" transform="rotate(' + i * 45 + ' 32 32)"/>';
+    }).join(''),
+    BG + '#f2f2f4"/><rect x="15" y="9" width="34" height="46" rx="3" fill="#fff" stroke="#d1d1d6"/><path d="M21 20h22M21 27h22M21 34h22M21 41h14" stroke="#b0b0b8" stroke-width="2"/>',
+    BG + '#fff"/><text x="32" y="19" text-anchor="middle" font-size="11" font-weight="600" fill="#ff3b30" font-family="-apple-system, sans-serif" id="m-cal-day"></text><text x="32" y="50" text-anchor="middle" font-size="30" font-weight="300" fill="#1d1d1f" font-family="-apple-system, sans-serif" id="m-cal-date"></text>',
+    '<defs><linearGradient id="d7" x2="0" y2="1"><stop offset="0" stop-color="#d1d3d8"/><stop offset="1" stop-color="#8b8e96"/></linearGradient></defs>' + BG + 'url(#d7)"/><circle cx="32" cy="32" r="14" fill="none" stroke="#fff" stroke-width="7" stroke-dasharray="5.5 3.3"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/>'
+  ];
+  $('m-dock').innerHTML = DOCK.map(function (svg, i) {
+    return '<span' + (i === 5 ? ' class="run"' : '') + '><svg viewBox="0 0 64 64">' + svg + '</svg></span>';
+  }).join('');
+
+  // Menu bar clock and the calendar icon follow the visitor's own clock.
   function tickClock() {
     var d = new Date();
     try {
       $('m-clock').textContent = d.toLocaleString('zh-TW', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-      $('m-date').textContent = d.toLocaleString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      $('m-cal-day').textContent = d.toLocaleDateString('zh-TW', { weekday: 'short' });
+      $('m-cal-date').textContent = d.getDate();
     } catch (e) {}
   }
   tickClock();
   setInterval(tickClock, 30000);
   buildMacKB($('m-kb'));
 
+  // The tilted base covers less height than its layout box: pull up what
+  // follows by the difference so nothing gaps below the laptop.
+  var deckWrap = $('deck-wrap');
+  function fitDeck() {
+    var deck = deckWrap.firstElementChild;
+    deckWrap.style.marginBottom = (deck.getBoundingClientRect().height - deck.offsetHeight) + 'px';
+  }
+  fitDeck();
+  if ('ResizeObserver' in window) new ResizeObserver(fitDeck).observe(deckWrap);
+
   var stage = $('stage');
   function press(k) {
     stage.querySelectorAll('[data-k="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]').forEach(function (el) {
       el.classList.add('down');
-      setTimeout(function () { el.classList.remove('down'); }, 150);
+      setTimeout(function () { el.classList.remove('down'); }, 170);
     });
   }
 
   // ---------- Hero: Mac typing demo ----------
-  var hero = { lines: [], marked: '', list: [], sel: 0 };
+  // lines: finished lines; cur: committed text of the line being typed;
+  // marked: bopomofo being composed; list/sel: its candidates and selection.
+  var hero = { lines: [], cur: '', marked: '', list: [], sel: 0 };
+  // Built once and updated in place, so the candidate window stays put
+  // while typing instead of popping up again on every key.
+  var mDoc = $('m-doc');
+  mDoc.innerHTML = '<div class="flow" id="m-flow"><div class="lines" id="m-lines"></div><p><span id="m-cur"></span><span class="comp"><u id="m-marked"></u>' +
+    '<span class="cpanel hide" id="m-panel"><span class="items" id="m-items"></span><span class="hl" id="m-hl"><span class="ghost" id="m-ghost"></span></span></span></span><span class="caret" id="m-caret"></span></p></div>';
+  var mHl = $('m-hl'), mItems = $('m-items'), mGhost = $('m-ghost');
+  var mFlow = $('m-flow'), mLines = $('m-lines'), mCur = $('m-cur'), mMarked = $('m-marked'), mPanel = $('m-panel'), mCaret = $('m-caret');
+  var mDisplay = document.querySelector('.display');
+  var shownCount = 0, caretTimer = 0;
+  // Scroll the document like an editor: keep the line being typed, and the
+  // candidate window under it, in view.
+  function follow() {
+    var line = mCur.parentNode;
+    // Always leave room for the candidate window, shown or not, so the page
+    // doesn't bob up and down as it comes and goes.
+    var room = mPanel.offsetHeight + 10;
+    var view = mDoc.clientHeight - parseFloat(getComputedStyle(mDoc).paddingTop);
+    var off = Math.max(0, line.offsetTop + line.offsetHeight + room - view);
+    mFlow.style.transform = off ? 'translateY(' + (-off) + 'px)' : '';
+  }
   function renderHero() {
-    var list = hero.list;
-    var panel = list.length ? '<span class="cpanel">' + list.slice(0, 6).map(function (c, i) {
-      return '<span data-i="' + i + '"' + (i === hero.sel ? ' class="on"' : '') + '><sup>' + (i + 1) + '</sup>' + esc(c) + '</span>';
-    }).join('') + '</span>' : '';
-    var cur = (hero.marked ? '<span class="comp"><u>' + esc(hero.marked) + '</u>' + panel + '</span>' : '') + '<span class="caret"></span>';
-    $('m-doc').innerHTML = hero.lines.slice(-3).map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('') + '<p>' + cur + '</p>';
+    if (hero.lines.length > shownCount) {
+      // A finished line is appended as is: the text doesn't move or flash.
+      for (var n = shownCount; n < hero.lines.length; n++) {
+        var p = document.createElement('p');
+        p.textContent = hero.lines[n];
+        mLines.appendChild(p);
+      }
+    } else if (hero.lines.length < shownCount) {
+      mLines.innerHTML = hero.lines.map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('');
+    }
+    shownCount = hero.lines.length;
+    mCur.textContent = hero.cur;
+    mMarked.textContent = hero.marked;
+    var list = hero.list.slice(0, 9);
+    var appearing = list.length && mPanel.classList.contains('hide');
+    if (list.length) {
+      mItems.innerHTML = mGhost.innerHTML = list.map(function (c, i) {
+        return '<span><sup>' + (i + 1) + '</sup>' + esc(c) + '</span>';
+      }).join('');
+    }
+    // Keep the last candidates while fading out on commit.
+    mPanel.classList.toggle('hide', !list.length);
+    var picked = mItems.children[hero.sel];
+    if (list.length && picked) {
+      // Placed directly only when the window appears; otherwise it glides.
+      mHl.classList.toggle('jump', !!appearing);
+      var x = mItems.offsetLeft + picked.offsetLeft;
+      mHl.style.width = picked.offsetWidth + 'px';
+      mHl.style.transform = 'translateX(' + x + 'px)';
+      mGhost.style.top = (mItems.offsetTop - mHl.offsetTop) + 'px';
+      mGhost.style.transform = 'translateX(' + (mItems.offsetLeft - x) + 'px)';
+    }
+    // Like the real one, the window shifts left rather than run off the screen.
+    if (list.length) {
+      mPanel.style.left = '';
+      var over = mPanel.getBoundingClientRect().right - (mDisplay.getBoundingClientRect().right - 8);
+      if (over > 0) mPanel.style.left = (-6 - over) + 'px';
+    }
+    // A real caret stays solid while typing and blinks once idle.
+    mCaret.classList.add('solid');
+    clearTimeout(caretTimer);
+    caretTimer = setTimeout(function () { mCaret.classList.remove('solid'); }, 700);
+    follow();
   }
 
-  var HERO_SENTENCES = ['ㄋㄏㄇ', 'ㄉㄅㄑㄨㄅㄓㄉ', 'ㄊㄏㄌㄒㄒㄋ', 'ㄒㄋㄎㄌㄕㄊㄐㄎ', 'ㄇㄍㄒㄅㄎㄑ'];
+  // Quotes, in a fresh random order per visit (data from gen-website-data.py:
+  // each piece typed with the fewest keys; r = its place among the candidates).
+  var QUOTES = window.LB_QUOTES || [];
+  var PUNCT_KEY = { '，': ',', '。': '.', '？': '/', '！': '1', '：': ';' };
+  function shuffled(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)), t = a[i];
+      a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
   var heroSeen = watch(stage);
   var heroRun = 0;
 
   async function autoplay() {
     var id = ++heroRun;
     var alive = function () { return id === heroRun; };
-    hero = { lines: [], marked: '', list: [], sel: 0 };
+    hero = { lines: [], cur: '', marked: '', list: [], sel: 0 };
     renderHero();
     await sleep(700);
-    while (alive()) {
-      for (var s = 0; s < HERO_SENTENCES.length; s++) {
-        var input = HERO_SENTENCES[s];
-        for (var i = 1; i <= input.length; i++) {
+    var order = [];
+    while (alive() && QUOTES.length) {
+      if (!order.length) order = shuffled(QUOTES);
+      var steps = order.shift();
+      for (var s = 0; s < steps.length; s++) {
+        var step = steps[s];
+        if (typeof step === 'string') {
+          // Shift + , . / 1 ; types the mark (and commits what is composed),
+          // in the same rhythm as the bopomofo keys.
           await whenShown(heroSeen);
           await sleep(human());
           if (!alive()) return;
-          press(SYM2KEY[input[i - 1]]);
-          hero.marked = input.slice(0, i);
+          press('Shift'); press(PUNCT_KEY[step]);
+          hero.cur += (hero.marked ? hero.list[hero.sel] : '') + step;
+          hero.marked = ''; hero.list = []; hero.sel = 0;
+          renderHero();
+          continue;
+        }
+        for (var i = 1; i <= step.k.length; i++) {
+          await whenShown(heroSeen);
+          await sleep(human());
+          if (!alive()) return;
+          press(SYM2KEY[step.k[i - 1]]);
+          hero.marked = step.k.slice(0, i);
           hero.list = cands(hero.marked);
           hero.sel = 0;
           renderHero();
         }
-        await sleep(1000);
+        var r = step.r || 1, next = steps[s + 1];
+        if (hero.list[r - 1] !== step.t) console.warn('demo data out of date:', step.k, hero.list[r - 1], '≠', step.t);
+        // ，。？： commit the first candidate themselves; ！ can't (Shift+1
+        // selects while composing), and later candidates take Shift+r.
+        if (r === 1 && typeof next === 'string' && next !== '！') continue;
+        await sleep(650);
         if (!alive()) return;
-        press('Enter');
-        hero.lines.push(hero.list[0] || hero.marked);
-        hero.marked = ''; hero.list = [];
+        if (r === 1 && next !== '！') {
+          press('Enter');
+        } else {
+          // Glide to the pick, hold it so the viewer sees what's chosen, then press.
+          hero.sel = r - 1;
+          renderHero();
+          await sleep(220 + 400);
+          if (!alive()) return;
+          press('Shift'); press(String(r));
+          await sleep(150);
+        }
+        hero.cur += step.t;
+        hero.marked = ''; hero.list = []; hero.sel = 0;
         renderHero();
-        await sleep(2200);
       }
-      await sleep(1200);
+      // One quote per line; the document grows and scrolls. After all of
+      // them, a fresh page for the next shuffled round.
+      await sleep(1600);
       if (!alive()) return;
-      hero.lines = [];
+      hero.lines.push(hero.cur);
+      hero.cur = '';
       renderHero();
+      if (!order.length) {
+        await sleep(2400);
+        if (!alive()) return;
+        mLines.classList.add('fade');
+        await sleep(500);
+        hero.lines = [];
+        renderHero();
+        mLines.classList.remove('fade');
+        await sleep(400);
+      }
     }
   }
 
   function heroStatic() {
-    hero = { lines: HERO_SENTENCES.slice(0, 3).map(function (s) { return cands(s)[0]; }), marked: 'ㄒㄋㄎㄌ', list: cands('ㄒㄋㄎㄌ'), sel: 0 };
+    hero = {
+      lines: shuffled(QUOTES).slice(0, 3).map(function (steps) {
+        return steps.map(function (s) { return typeof s === 'string' ? s : s.t; }).join('');
+      }),
+      cur: '', marked: '', list: [], sel: 0
+    };
     renderHero();
   }
   if (reduce) heroStatic(); else autoplay();
@@ -759,7 +926,7 @@ footer a { color: var(--ink2); }
     { full: 'ㄋㄗㄋㄌ', parts: [['ㄋㄗ', '你在'], ['ㄋㄌ', '哪裡']] }
   ];
   var ex = 0, step = 0, typedText = '';
-  var lChips = $('l-chips'), lLine = $('l-line'), lAsk = $('l-ask'), lToast = $('l-toast'), lAgain = $('l-again');
+  var lChips = $('l-chips'), lLine = $('l-line'), lGuess = $('l-guess'), lAsk = $('l-ask'), lToast = $('l-toast'), lAgain = $('l-again');
   $('l-ex').innerHTML = EXAMPLES.map(function (e, i) {
     return '<button type="button" data-ex="' + i + '" aria-pressed="' + (i === 0) + '">' + e.parts.map(function (p) { return p[1]; }).join('') + '</button>';
   }).join('');
@@ -770,23 +937,23 @@ footer a { color: var(--ink2); }
     learnReset();
   });
   function stepsOn(i) { $('l-steps').querySelectorAll('li').forEach(function (li, j) { li.classList.toggle('on', j === i); }); }
-  function chipsHTML(list, target) {
+  function wanted(e) { return e.parts.map(function (p) { return p[1]; }).join(''); }
+  /// `firstClass` marks the first candidate: 'wrong' (not what was meant) or 'right'.
+  function chipsHTML(list, target, firstClass) {
     return list.map(function (c, i) {
-      return '<button type="button" class="chip' + (i === 0 ? ' first' : '') + (c === target ? ' target' : '') + '" data-t="' + esc(c) + '"><sup>' + (i + 1) + '</sup>' + esc(c) + '</button>';
+      return '<button type="button" class="chip' + (i === 0 ? ' ' + firstClass : '') + (c === target ? ' target' : '') + '" data-t="' + esc(c) + '"><sup>' + (i + 1) + '</sup>' + esc(c) + '</button>';
     }).join('');
   }
-  function flip(container, html) {
-    var before = {};
-    container.querySelectorAll('[data-t]').forEach(function (el) { before[el.dataset.t] = el.getBoundingClientRect(); });
-    container.innerHTML = html;
-    container.querySelectorAll('[data-t]').forEach(function (el) {
-      var b = before[el.dataset.t];
-      if (!b) { el.classList.add('enter'); return; }
-      var a = el.getBoundingClientRect(), dx = b.left - a.left, dy = b.top - a.top;
-      if (!dx && !dy) return;
-      el.style.transition = 'none';
-      el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-      requestAnimationFrame(function () { requestAnimationFrame(function () { el.style.transition = ''; el.style.transform = ''; }); });
+  function guessHTML(label, text, right) {
+    return esc(label) + (right
+      ? '<b class="good">' + esc(text) + '</b><span class="badge good">✓ 對了</span>'
+      : '<s>' + esc(text) + '</s><span class="badge bad">✗ 猜錯了</span>');
+  }
+  function settle(container) {
+    if (reduce || !container.animate) return;
+    Array.prototype.forEach.call(container.children, function (el, i) {
+      el.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 260, delay: i * 22, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'backwards' });
     });
   }
   function learnPaint() {
@@ -794,9 +961,13 @@ footer a { color: var(--ink2); }
     var rest = e.parts.slice(step).map(function (p) { return p[0]; }).join('');
     var target = e.parts[step][1];
     var list = cands(step === 0 ? e.full : rest);
-    lLine.innerHTML = esc(typedText) + '<u>' + rest + '</u>';
-    lAsk.textContent = step === 0 ? '第一個候選不對？先點「' + target + '」' : '再點「' + target + '」';
-    lChips.innerHTML = chipsHTML(list, target);
+    var meant = step === 0 ? wanted(e) : target;
+    $('l-want').textContent = wanted(e);
+    lLine.innerHTML = (typedText ? '<span class="ok">' + esc(typedText) + '</span>' : '') + '<u>' + rest + '</u>';
+    lGuess.innerHTML = guessHTML('出現', list[0], list[0] === meant);
+    lAsk.textContent = step === 0 ? '先點「' + target + '」，分段選對' : '再點「' + target + '」';
+    lChips.innerHTML = chipsHTML(list, target, list[0] === meant ? 'right' : 'wrong');
+    settle(lChips);
     stepsOn(step === 0 ? 0 : 1);
   }
   function learnReset() {
@@ -815,24 +986,27 @@ footer a { color: var(--ink2); }
     if (step < e.parts.length) { learnPaint(); return; }
     // Learned: show it, then type the same keys again.
     step = -1;
-    var whole = e.parts.map(function (p) { return p[1]; }).join('');
-    lLine.textContent = whole;
+    var whole = wanted(e);
+    lLine.innerHTML = '<span class="ok">' + esc(whole) + '</span>';
+    lGuess.innerHTML = '';
     lChips.innerHTML = '';
     lAsk.textContent = '';
     stepsOn(2);
     lToast.innerHTML = '<b>✓</b>已學會「' + esc(whole) + '」';
     lToast.classList.add('on');
     await sleep(reduce ? 400 : 1300);
+    lToast.classList.remove('on');
     lLine.innerHTML = '';
+    lAsk.textContent = '再打一次 ' + e.full;
     for (var i = 1; i <= e.full.length; i++) {
       await sleep(reduce ? 0 : human());
       lLine.innerHTML = '<u>' + e.full.slice(0, i) + '</u>';
     }
-    lAsk.textContent = '再打一次 ' + e.full + '：';
-    lChips.innerHTML = chipsHTML(cands(e.full), '');
-    await sleep(reduce ? 0 : 700);
-    lToast.classList.remove('on');
-    flip(lChips, chipsHTML(cands(e.full, L), ''));
+    // Learned: the same keys now give the whole sentence first, right away.
+    var learned = cands(e.full, L);
+    lGuess.innerHTML = guessHTML('出現', learned[0], learned[0] === whole);
+    lChips.innerHTML = chipsHTML(learned, '', learned[0] === whole ? 'right' : 'wrong');
+    settle(lChips);
     lAsk.textContent = '「' + whole + '」直接排第一。';
     lAgain.classList.add('on');
   });
@@ -853,6 +1027,7 @@ footer a { color: var(--ink2); }
         await sleep(human() + 60);
         sIni.insertAdjacentHTML('beforeend', '<span>' + s[i - 1] + '</span>');
         sBig.textContent = cands(s.slice(0, i))[0] || '';
+        sBig.classList.remove('tick'); void sBig.offsetWidth; sBig.classList.add('tick');
       }
       await sleep(400);
       sBig.classList.add('done');
