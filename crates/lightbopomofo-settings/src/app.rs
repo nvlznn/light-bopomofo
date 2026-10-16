@@ -75,8 +75,12 @@ const ID_CLEAR: i32 = 105;
 const ID_SITE: i32 = 106;
 const ID_ISSUES: i32 = 107;
 const ID_AUTO_UPDATE: i32 = 108;
+const ID_TUTORIAL: i32 = 109;
 /// Posted by the update thread when it has news (in UPDATE_EVENTS).
 const WM_UPDATE: u32 = WM_APP + 1;
+/// Posted by the 「打字教學」 button: the tutorial runs once the button's
+/// handler has put the state down.
+const WM_TUTORIAL: u32 = WM_APP + 2;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -87,7 +91,7 @@ fn wide(s: &str) -> Vec<u16> {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Status {
+pub(crate) enum Status {
     NotInstalled,
     NotEnabled,
     Ready,
@@ -193,7 +197,7 @@ fn in_user_list() -> Option<bool> {
     Some(found)
 }
 
-fn status() -> Status {
+pub(crate) fn status() -> Status {
     if !registered() {
         Status::NotInstalled
     } else if in_user_list().unwrap_or_else(enabled) {
@@ -205,7 +209,7 @@ fn status() -> Status {
 
 /// Add 輕注音 to (or remove it from) the user's input methods, the way
 /// Settings does, through input.dll's InstallLayoutOrTip.
-fn install_layout_or_tip(enable: bool) -> bool {
+pub(crate) fn install_layout_or_tip(enable: bool) -> bool {
     const ILOT_UNINSTALL: u32 = 0x1;
     unsafe {
         let Ok(input) = LoadLibraryW(w!("input.dll")) else {
@@ -361,6 +365,7 @@ struct Ui {
     clear: HWND,
     site: HWND,
     issues: HWND,
+    tutorial: HWND,
     auto_update: HWND,
     font: Option<HFONT>,
     bold: Option<HFONT>,
@@ -455,6 +460,7 @@ fn fonts(ui: &mut Ui) {
         ui.clear,
         ui.site,
         ui.issues,
+        ui.tutorial,
         ui.auto_update,
     ];
     for c in controls {
@@ -532,6 +538,13 @@ fn layout(ui: &Ui) {
     place(
         ui.site,
         w - m - scale(208, d),
+        by,
+        scale(100, d),
+        scale(32, d),
+    );
+    place(
+        ui.tutorial,
+        w - m - scale(316, d),
         by,
         scale(100, d),
         scale(32, d),
@@ -829,6 +842,14 @@ fn create(hwnd: HWND) {
             0,
             ID_ISSUES,
         );
+        ui.tutorial = child(
+            hwnd,
+            bt,
+            "打字教學",
+            BS_PUSHBUTTON as u32 | WS_TABSTOP.0,
+            0,
+            ID_TUTORIAL,
+        );
         ui.auto_update = child(
             hwnd,
             bt,
@@ -889,6 +910,9 @@ fn command(id: i32, code: u32) {
             (ID_CLEAR, BN_CLICKED) => clear_all(&mut ui),
             (ID_SITE, BN_CLICKED) => open(w!("https://lightbopomofo.noky.dev")),
             (ID_ISSUES, BN_CLICKED) => open(w!("https://github.com/nvlznn/light-bopomofo/issues")),
+            (ID_TUTORIAL, BN_CLICKED) => unsafe {
+                let _ = PostMessageW(Some(ui.hwnd), WM_TUTORIAL, WPARAM(0), LPARAM(0));
+            },
             _ => {}
         }
     });
@@ -1010,6 +1034,10 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             }
             LRESULT(0)
         }
+        WM_TUTORIAL => {
+            crate::tutorial::run(Some(hwnd));
+            LRESULT(0)
+        }
         WM_DESTROY => {
             unsafe { PostQuitMessage(0) };
             LRESULT(0)
@@ -1094,6 +1122,12 @@ pub fn main() {
             dwICC: ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES,
         };
         let _ = InitCommonControlsEx(&controls);
+
+        // The first time (not when opened to update): the typing tutorial,
+        // then the window.
+        if !update::tutorial_done() && !UPDATE_NOW.load(Ordering::Relaxed) {
+            crate::tutorial::run(None);
+        }
 
         let instance = GetModuleHandleW(None).unwrap_or_default();
         let class = WNDCLASSEXW {

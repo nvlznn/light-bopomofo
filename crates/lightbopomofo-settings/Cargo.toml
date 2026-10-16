@@ -17,11 +17,18 @@ embed-resource = "3"
 
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.62"
+windows-numerics = "0.3"
 windows = { version = "0.62", features = [
     "Data_Xml_Dom",
     "UI_Notifications",
     "Win32_Foundation",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
     "Win32_Networking_WinHttp",
     "Win32_Security",
     "Win32_System_Com",
@@ -29,6 +36,7 @@ windows = { version = "0.62", features = [
     "Win32_System_Registry",
     "Win32_UI_Controls",
     "Win32_UI_HiDpi",
+    "Win32_UI_Input_Ime",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_TextServices",
