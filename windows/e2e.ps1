@@ -73,6 +73,16 @@ $code = Wait-Exit "$dir\LightBopomofo.exe" @("--check-update", "--now")
 Check "update check reaches GitHub" (($code -eq 0) -or ($code -eq 10)) "(exit $code)"
 $code = Wait-Exit "$dir\LightBopomofo.exe" @("--notify-test", "2.0")
 Check "update notification shown" ($code -eq 0) "(exit $code)"
+# First launch: the typing tutorial (Direct2D) comes up and stays up.
+$tutorial = Start-Process "$dir\LightBopomofo.exe" -PassThru
+Start-Sleep -Seconds 6
+$tutorial.Refresh()
+Check "tutorial stays open" (-not $tutorial.HasExited) "(exit $(if ($tutorial.HasExited) { $tutorial.ExitCode }))"
+Stop-Process -Id $tutorial.Id -Force -ErrorAction SilentlyContinue
+# Seen: the app opens on its window from now on.
+$settings = "HKCU:\Software\LightBopomofo"
+if (-not (Test-Path $settings)) { $null = New-Item $settings }
+Set-ItemProperty $settings -Name TutorialDone -Value 1 -Type DWord
 # The app offering an update (as if 2.0 were out).
 $env:LIGHTBOPOMOFO_PRETEND_LATEST = "2.0"
 $shown = Start-Process "$dir\LightBopomofo.exe" -PassThru

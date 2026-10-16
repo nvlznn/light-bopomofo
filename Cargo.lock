@@ -102,6 +102,7 @@ dependencies = [
  "lightbopomofo-core",
  "windows",
  "windows-core",
+ "windows-numerics",
 ]
 
 [[package]]

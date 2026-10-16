@@ -17,6 +17,8 @@
 #[cfg(windows)]
 mod app;
 #[cfg(windows)]
+mod tutorial;
+#[cfg(windows)]
 mod update;
 
 #[cfg(windows)]

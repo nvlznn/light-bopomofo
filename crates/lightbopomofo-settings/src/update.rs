@@ -158,6 +158,16 @@ pub fn set_auto_check(on: bool) {
     );
 }
 
+/// Whether the typing tutorial was finished or skipped (it opens the app
+/// until then).
+pub fn tutorial_done() -> bool {
+    get_dword(w!("TutorialDone")) == Some(1)
+}
+
+pub fn set_tutorial_done() {
+    set_value(w!("TutorialDone"), REG_DWORD.0, &1u32.to_le_bytes());
+}
+
 // ---------------------------------------------------------------------------
 // Network.
 // ---------------------------------------------------------------------------

@@ -363,7 +363,7 @@ private struct PracticeStep: View {
 
     private static let copy: [(title: String, chip: String, subtitle: String)] = [
         ("每個字\n只打第一個注音", "ㄋㄏㄇ", "打 ㄋㄏㄇ，按 Enter 送出「你好嗎」。"),
-        ("按 Tab 選字", "Tab", "打 ㄇㄊ，按 Tab 選「明天」。Shift + Tab 往回。"),
+        ("按 Tab 或 → 選字", "Tab / →", "打 ㄇㄊ，按 Tab 或 → 選「明天」。Shift + Tab 或 ← 往回。"),
         ("找不到？\n按 ] 翻頁", "[ ]", "打 ㄏㄏ，到下一頁找「還好」。[ 回上一頁。"),
         ("整句不對？\n分段選", "分段", "打 ㄇㄇㄒㄒㄋ，先選「媽媽」，再選「謝謝你」。"),
         ("輕注音\n記住你的選擇", "記住了", "再打一次 ㄇㄇㄒㄒㄋ，「媽媽謝謝你」已經排在第一個。"),
