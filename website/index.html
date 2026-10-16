@@ -187,8 +187,9 @@ button { font: inherit; color: inherit; }
 .cpanel .ghost { position: absolute; left: 0; top: 0; color: #fff; transition: transform .22s var(--glide); }
 .cpanel .ghost sup { color: rgba(255,255,255,.8); }
 .cpanel .hl.jump, .cpanel .hl.jump .ghost { transition: none; }
-/* Appears at once like the real window; fades out quickly on commit. */
-.cpanel.hide { opacity: 0; pointer-events: none; transition: opacity .15s ease-out; }
+/* Appears and disappears at once, like the real window: a fade would show it
+   sliding along as the caret moves past the committed text. */
+.cpanel.hide { opacity: 0; pointer-events: none; }
 .caret.solid { animation: none; }
 .lines p { transition: opacity .45s var(--ease); }
 .lines.fade p { opacity: 0; }
@@ -816,7 +817,7 @@ footer a { color: var(--ink2); }
           // Glide to the pick, hold it so the viewer sees what's chosen, then press.
           hero.sel = r - 1;
           renderHero();
-          await sleep(220 + 400);
+          await sleep(220 + 300);
           if (!alive()) return;
           press('Shift'); press(String(r));
           await sleep(150);
