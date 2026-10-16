@@ -5,17 +5,24 @@ import UserNotifications
 struct LightBopomofoApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @StateObject private var model = AppModel()
+    @AppStorage(OnboardingView.doneKey) private var tutorialDone = false
 
     var body: some Scene {
         Window("輕注音", id: "main") {
-            TabView {
-                GeneralView()
-                    .tabItem { Label("一般", systemImage: "keyboard") }
-                HistoryView()
-                    .tabItem { Label("選字紀錄", systemImage: "clock.arrow.circlepath") }
+            Group {
+                if tutorialDone {
+                    TabView {
+                        GeneralView()
+                            .tabItem { Label("一般", systemImage: "keyboard") }
+                        HistoryView()
+                            .tabItem { Label("選字紀錄", systemImage: "clock.arrow.circlepath") }
+                    }
+                    .padding(20)
+                    .frame(minWidth: 620, minHeight: 460)
+                } else {
+                    OnboardingView { tutorialDone = true }
+                }
             }
-            .padding(20)
-            .frame(minWidth: 620, minHeight: 460)
             .environmentObject(model)
             .task { model.setUp() }
             .onReceive(NotificationCenter.default.publisher(for: AppModel.updateRequested)) { _ in

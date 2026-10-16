@@ -3,6 +3,7 @@ import SwiftUI
 struct GeneralView: View {
     @EnvironmentObject private var model: AppModel
     @State private var confirmingUninstall = false
+    @AppStorage(OnboardingView.doneKey) private var tutorialDone = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -37,6 +38,8 @@ struct GeneralView: View {
                 Spacer()
                 Toggle("自動檢查更新", isOn: $model.autoCheck)
                     .help("每天向 GitHub 查一次有沒有新版本，不傳送任何資料。")
+                Button("打字教學") { tutorialDone = false }
+                    .buttonStyle(.link)
                 Link("官網", destination: URL(string: "https://lightbopomofo.noky.dev")!)
                 Link("回報問題", destination: URL(string: "https://github.com/nvlznn/light-bopomofo/issues")!)
                 Button("解除安裝…", role: .destructive) { confirmingUninstall = true }
