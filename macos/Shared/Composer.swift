@@ -100,7 +100,8 @@ final class Composer {
             selected = (key == .pageNext ? min(page + 1, last) : max(page - 1, 0)) * Composer.pageSize
             return KeyResult(handled: true)
         case .punctuation(let p):
-            return KeyResult(handled: true, commit: commitAll() + p)
+            // While composing, punctuation is ignored (as in the system 注音).
+            return KeyResult(handled: true, commit: isEmpty ? p : "")
         case .other:
             return KeyResult(handled: false, commit: commitAll())
         case .abandon:

@@ -129,7 +129,7 @@ fn backspace_and_escape() {
 }
 
 #[test]
-fn punctuation_and_other_keys_commit_first() {
+fn punctuation_types_only_when_not_composing() {
     let (mut e, mut c) = (engine(), Composer::new());
     assert_eq!(
         c.handle(&mut e, Key::Punctuation("，".into())),
@@ -137,10 +137,10 @@ fn punctuation_and_other_keys_commit_first() {
     );
     typing(&mut c, &mut e, "ㄋㄏㄇ");
     assert_eq!(
-        c.handle(&mut e, Key::Punctuation("？".into())).commit,
-        "你好嗎？"
+        c.handle(&mut e, Key::Punctuation("？".into())),
+        handled("")
     );
-    typing(&mut c, &mut e, "ㄋㄏㄇ");
+    assert!(!c.is_empty());
     assert_eq!(
         c.handle(&mut e, Key::Other),
         KeyResult {
@@ -151,9 +151,10 @@ fn punctuation_and_other_keys_commit_first() {
     typing(&mut c, &mut e, "ㄍㄗㄈㄈ");
     select(&mut c, &mut e, "工作");
     assert_eq!(
-        c.handle(&mut e, Key::Punctuation("。".into())).commit,
-        "工作方法。"
+        c.handle(&mut e, Key::Punctuation("。".into())),
+        handled("")
     );
+    assert!(!c.is_empty());
 }
 
 #[test]

@@ -98,18 +98,19 @@ do {
     check(c.handle(.escape).handled && c.isEmpty, "escape clears")
 }
 
-// Punctuation and other keys commit first.
+// Punctuation types only when nothing is being composed; other keys commit first.
 do {
     let c = makeComposer()
     check(c.handle(.punctuation("，")) == KeyResult(handled: true, commit: "，"), "punctuation alone")
     type(c, "ㄋㄏㄇ")
-    check(c.handle(.punctuation("？")).commit == "你好嗎？", "commit then punctuation")
-    type(c, "ㄋㄏㄇ")
+    check(c.handle(.punctuation("？")) == KeyResult(handled: true), "punctuation ignored while composing")
+    check(!c.isEmpty, "composition kept after ignored punctuation")
     check(c.handle(.other) == KeyResult(handled: false, commit: "你好嗎"), "other key commits, passes")
-    // After a partial selection, the rest is committed with its best conversion.
+    // Also after a partial selection.
     type(c, "ㄍㄗㄈㄈ")
     _ = select(c, "工作")
-    check(c.handle(.punctuation("。")).commit == "工作方法。", "commitAll after partial selection")
+    check(c.handle(.punctuation("。")) == KeyResult(handled: true), "ignored after partial selection")
+    check(!c.isEmpty, "still composing after partial selection")
 }
 
 // A tone after symbols is part of the composition.

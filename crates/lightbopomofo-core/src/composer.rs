@@ -187,9 +187,8 @@ impl Composer {
                 KeyResult::handled(String::new())
             }
             Key::Punctuation(p) => {
-                let mut text = self.commit_all(engine);
-                text.push_str(&p);
-                KeyResult::handled(text)
+                // While composing, punctuation is ignored (as in the system 注音).
+                KeyResult::handled(if self.is_empty() { p } else { String::new() })
             }
             Key::Other => KeyResult {
                 handled: false,

@@ -3,8 +3,25 @@ import AppKit
 /// AppKit key events → composer `Key`s, shared by the input method and the
 /// app's tutorial.
 extension Key {
-    private static let punctuation: [String: String] = [
-        "<": "，", ">": "。", "?": "？", "!": "！", ":": "：",
+    /// What each punctuation key types as plain, with Shift and with Option,
+    /// by key code, as in the system 注音. `nil`: the key is a bopomofo symbol
+    /// (or nothing) in that state.
+    private static let punctuation: [UInt16: (plain: String?, shift: String, option: String)] = [
+        50: ("·", "～", "｀"),  // `
+        18: (nil, "！", "１"), 19: (nil, "＠", "２"), 20: (nil, "＃", "３"),
+        21: (nil, "＄", "４"), 23: (nil, "％", "５"), 22: (nil, "＾", "６"),
+        26: (nil, "＆", "７"), 28: (nil, "＊", "８"), 25: (nil, "（", "９"),
+        29: (nil, "）", "０"),
+        27: (nil, "＿", "—"),  // -
+        24: ("＝", "＋", "＝"),  // =
+        33: ("「", "『", "「"),  // [
+        30: ("」", "』", "」"),  // ]
+        42: ("、", "｜", "、"),  // \
+        41: (nil, "：", "；"),  // ;
+        39: ("‘", "“", "’"),  // '
+        43: (nil, "，", "，"),  // ,
+        47: (nil, "。", "．"),  // .
+        44: (nil, "？", "／"),  // /
     ]
 
     /// Number keys 1–9 by key code (the keypad's are separate keys).
@@ -21,7 +38,9 @@ extension Key {
         // Shortcuts and keypad numbers go to the app. Arrows, PageUp and
         // PageDown carry .numericPad too, so they are exempt from that one.
         let isNavigation = (123...126).contains(event.keyCode) || [116, 121].contains(event.keyCode)
-        if !flags.isDisjoint(with: [.command, .control, .option])
+        if !flags.isDisjoint(with: [.command, .control])
+            || flags.isSuperset(of: [.shift, .option])
+            || (flags.contains(.option) && punctuation[event.keyCode] == nil)
             || (flags.contains(.numericPad) && !isNavigation)
         {
             return .other
@@ -37,14 +56,17 @@ extension Key {
         case 48: return flags.contains(.shift) ? .previous : .next  // tab
         case 116: return .pagePrevious  // PageUp
         case 121: return .pageNext  // PageDown
-        case 33 where !flags.contains(.shift): return .pagePrevious  // [
-        case 30 where !flags.contains(.shift): return .pageNext  // ]
+        case 33 where composing && flags.isEmpty: return .pagePrevious  // [
+        case 30 where composing && flags.isEmpty: return .pageNext  // ]
         default: break
         }
-        if flags.contains(.shift) {
-            if composing, let n = digits[event.keyCode] { return .select(n) }
-            if let p = punctuation[event.characters ?? ""] { return .punctuation(p) }
-            return .other
+        if flags.contains(.shift), composing, let n = digits[event.keyCode] { return .select(n) }
+        if let p = punctuation[event.keyCode] {
+            if flags.contains(.shift) { return .punctuation(p.shift) }
+            if flags.contains(.option) { return .punctuation(p.option) }
+            if let plain = p.plain { return .punctuation(plain) }
+        } else if !flags.isDisjoint(with: [.shift, .option]) {
+            return .other  // Shift+letter: an uppercase letter; Option+letter: its own
         }
         if let ch = event.charactersIgnoringModifiers?.lowercased().first,
            let symbol = Engine.bopomofo(forKey: ch)
