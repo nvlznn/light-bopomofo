@@ -239,6 +239,42 @@ do {
     check(c.composingText.isEmpty, "nothing left composing")
 }
 
+// The tutorial: each lesson's keys, guidance, and learning carried over.
+do {
+    let lexicon = CommandLine.arguments[1]
+    let engine = Engine(lexiconPath: lexicon, historyPath: nil)!
+    let plans: [[Key]] = [
+        [.symbol("ㄋ"), .symbol("ㄏ"), .symbol("ㄇ"), .commit],
+        [.symbol("ㄇ"), .symbol("ㄊ"), .next, .next, .commit],
+        [.symbol("ㄏ"), .symbol("ㄏ"), .pageNext, .next, .commit],
+        [.symbol("ㄏ"), .symbol("ㄏ"), .commit],
+    ]
+    for (lesson, expected) in zip(Lesson.tutorial, plans) {
+        let p = Practice(lesson, engine: engine)
+        check(p.plan == expected, "\(lesson.target) plan \(p.plan)")
+        for (i, key) in p.plan.enumerated() {
+            check(p.progress == i && p.nextKey == key, "\(lesson.target) step \(i): \(String(describing: p.progress))")
+            p.handle(key)
+        }
+        check(p.isDone && p.nextKey == nil, "\(lesson.target) done")
+    }
+
+    // Off the plan: Esc is the way back; a wrong commit starts over.
+    let p = Practice(Lesson.tutorial[1], engine: Engine(lexiconPath: lexicon, historyPath: nil)!)
+    p.handle(.symbol("ㄇ"))
+    p.handle(.symbol("ㄋ"))
+    check(p.nextKey == .escape, "wrong symbol asks for Esc")
+    p.handle(.escape)
+    check(p.nextKey == .symbol("ㄇ"), "after Esc, back to the start")
+    p.handle(.symbol("ㄇ"))
+    p.handle(.symbol("ㄊ"))
+    p.handle(.commit)
+    check(p.wentWrong && !p.isDone, "committed the wrong word")
+    check(p.handle(.backspace) && p.committed.count == 1, "backspace deletes committed text")
+    p.restart()
+    check(p.nextKey == .symbol("ㄇ") && !p.wentWrong, "restart")
+}
+
 // Which release is newer (UpdateCheck).
 do {
     let json = Data("""
