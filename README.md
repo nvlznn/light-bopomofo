@@ -1,19 +1,30 @@
 # 輕注音輸入法 Light Bopomofo
 
-把 iPhone 注音的「簡拼」打法搬到電腦：每個字只打開頭的注音，就能選出整個詞。
+把 iPhone 注音的「簡拼」打法搬到電腦：每個字只打開頭的注音，就能選出整個詞、整句話。
 
 ```
 ㄋㄏㄇ   → 你好嗎
-ㄍㄗㄈㄈ → 工作方法
+ㄉㄅㄑ   → 對不起
+ㄕㄖㄎㄌ → 生日快樂
 ```
+
+想打得更準時，多打幾個注音或加上聲調，候選就會縮小。輸入法會記住你的選擇，常打的字詞越用越前面。
 
 ## 下載
 
 **macOS 13 以上（Apple Silicon 與 Intel）**：到 [lightbopomofo.noky.dev](https://lightbopomofo.noky.dev) 或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo.dmg`，把「輕注音」拖到「應用程式」並打開，它會自動安裝並啟用輸入法。接著在選單列的輸入法選單選「輕注音」。
 
-**Windows 10/11**：開發中。測試版安裝檔由 CI 產生（Actions → 最新的 CI → Artifacts → LightBopomofo-Setup），試用方式見 [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)。
+**Windows 10/11**：同樣從官網或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo-Setup.exe` 並執行。安裝檔還沒有程式碼簽署，看到「Windows 已保護您的電腦」時按「其他資訊」→「仍要執行」。裝完按 Windows 鍵 + 空白鍵切換到「輕注音」；單按 Shift 切換中／英。
 
 輸入法完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。「輕注音」App 每天向 GitHub 查一次有沒有新版本，有的話會跳出通知，按一下就更新（可以在 App 關閉）。
+
+## 按鍵
+
+| 按鍵 | 作用 |
+|---|---|
+| ← → Tab | 選候選；可以只選前段，剩下的接著選 |
+| Shift + 1–9 | 直接送出這一頁的第幾個 |
+| [ ] PageUp PageDown | 換頁 |
 
 ## 開發
 
@@ -62,6 +73,8 @@ powershell -ExecutionPolicy Bypass -File windows\build.ps1
 
 在 Mac 上可以做型別檢查：`cargo check -p lightbopomofo-windows -p lightbopomofo-settings --target x86_64-pc-windows-msvc`。
 
+工作列上的「輕」是語言列的輸入模式按鈕（`langbar.rs`），依工作列深淺色顯示白字 `windows/lightbopomofo-input.ico` 或黑字 `windows/lightbopomofo-input-light.ico`，兩者和 App 圖示都由 `scripts/make-icon.swift` 產生。
+
 ## 發布新版（macOS）
 
 1. 改版本號：每次發佈升一個大版本（1.0 → 2.0 → 3.0）。`macos/App/Info.plist` 的 `CFBundleShortVersionString` 寫 `2.0`（輸入法會自動跟著，標籤就是 `v2.0`），`CFBundleVersion` 加 1；`Cargo.toml` 的 `version` 寫 `2.0.0`（Windows 版用它，Cargo 規定要三段）。更新 `macos/RELEASE_NOTES.md`。
@@ -69,9 +82,18 @@ powershell -ExecutionPolicy Bypass -File windows\build.ps1
 3. commit 並 push 後，在「終端機」執行 `macos/release.sh --publish`：它會用 git 建立並推送 tag（`gh` 沒有 `workflow` 權限時無法替含 CI 設定的 commit 建 tag），再建立 GitHub Release 並附上 dmg。
    檔名固定為 `LightBopomofo.dmg`，官網的 `releases/latest/download/LightBopomofo.dmg` 連結就不用改。
 
-Release 發布後，`.github/workflows/release.yml` 會建置 Windows 安裝檔並附加到同一個 Release（`LightBopomofo-Setup.exe`）——前提是 GitHub 專案變數 `WINDOWS_RELEASE` 設為 `true`（Windows 版測試通過後才設定）。
+Release 發布後，`.github/workflows/release.yml` 會建置 Windows 安裝檔並附加到同一個 Release（`LightBopomofo-Setup.exe`；GitHub 專案變數 `WINDOWS_RELEASE` 已設為 `true`）。只有 Windows 版需要修正時，不必重發 macOS：把 tag 移到修正後的 commit，再執行 `gh workflow run release.yml -f tag=v2.0` 重建安裝檔。
 
-官網（`website/`）在 push 到 `main` 時由 Vercel 自動部署。
+## 官網
+
+官網（`website/`）是單一靜態頁，push 到 `main` 時由 Vercel 自動部署。
+
+```sh
+scripts/serve-website.py          # 本機預覽 http://127.0.0.1:8765/，存檔後自動重新整理
+scripts/gen-website-data.py       # 詞庫或引擎改了之後重跑，產生 website/candidates.js
+```
+
+網頁上的示範候選全部來自真引擎：`gen-website-data.py` 呼叫 `target/release/lb-cli`（先 `cargo build --release -p lightbopomofo-cli`），把結果寫進 `website/candidates.js`。MacBook 示範打的名言連同每段的打法也寫在這支腳本裡，產生時會逐段驗證；詞庫改變後某段打不出來，它會直接報錯。
 
 ## 授權
 
