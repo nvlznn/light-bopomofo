@@ -2,7 +2,7 @@
 //! the selection, driven by platform-independent keys. Platform shells
 //! translate OS key events into [`Key`]s and render the state.
 //!
-//! Mirrors macos/IME/Composer.swift (same behaviour, same test scenarios).
+//! Mirrors macos/Shared/Composer.swift (same behaviour, same test scenarios).
 
 use crate::bopomofo::FIRST_TONE;
 use crate::engine::{Candidate, Engine};
