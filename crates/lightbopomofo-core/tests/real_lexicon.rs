@@ -164,6 +164,15 @@ fn symbols_spelling_a_syllable_are_one_character() {
 }
 
 #[test]
+fn words_spelled_out_in_a_sentence_win() {
+    // ㄍㄨㄥㄨㄢ typed in full is 貢丸, also inside a sentence, not split
+    // into the more common 成功 and 萬.
+    assert_eq!(top("ㄍㄨㄥㄨㄢ", 1), ["貢丸"]);
+    let whole = &top("ㄞㄔㄍㄨㄥㄨㄢ", 1)[0];
+    assert!(whole.ends_with("貢丸"), "{whole}");
+}
+
+#[test]
 fn rare_characters_only_if_macos_draws_them() {
     // No macOS font has 𨉣 (ㄏㄚ): it would show as a box.
     assert!(!top("ㄏㄚ", 100).contains(&"𨉣".to_string()));

@@ -55,6 +55,12 @@ pub const COMMON_SYLLABLE_FREQ: u32 = 100;
 /// A shortcut scores this much above the best reading of the same symbols
 /// (one word or several).
 pub const SHORTCUT_LIFT: f64 = 0.5;
+/// A word of several syllables, each typed in full with two or more symbols
+/// (ㄍㄨㄥㄨㄢ for 貢丸): the user spelled out that word, so it wins over
+/// more common words that split the same symbols (愛成功萬 for ㄞㄔㄍㄨㄥㄨㄢ).
+/// One-symbol syllables (ㄕ, ㄖ) don't count: typed alone they are as
+/// likely initials (ㄕㄖ is 生日, not 十日).
+pub const WORD_SPELLED_OUT: f64 = 3.0;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
 /// A learned word scores this much above the best word for the same symbols.
@@ -530,6 +536,7 @@ impl Engine {
         // stored code points directly and compute the log only on a match.
         let entry = self.lexicon.entry(id);
         let mut score = 0.0;
+        let mut spelled = 0;
         for (k, &(a, b)) in slots.iter().enumerate() {
             let syl = entry.raw_syllable(k);
             let mut typed = &input[a..b];
@@ -564,6 +571,12 @@ impl Engine {
             if toned && typed.len() < base_len {
                 score += SLOT_TONED_INCOMPLETE;
             }
+            if typed.len() == base_len && base_len >= 2 {
+                spelled += 1;
+            }
+        }
+        if slots.len() >= 2 && spelled == slots.len() {
+            score += WORD_SPELLED_OUT;
         }
         Some(score + self.lexicon.log_prob_of(entry.freq()) + WORD_PENALTY)
     }
