@@ -8,11 +8,11 @@
 //! prefix-only candidates.
 //!
 //! A slot cut short — the next symbols would continue it into a longer
-//! syllable, as ㄧˇ does after ㄋ — is heavily penalized when that longer
-//! syllable looks fully typed (it has a tone or three symbols), so it stays
-//! one character (ㄋㄧˇ is 你, not 難以 from ㄋ|ㄧˇ). A two-symbol syllable
-//! is as likely two abbreviated characters (ㄇㄧ in ㄕㄇㄧㄙ is 麼意 of
-//! 什麼意思 as much as 密 of 史密斯), so cutting it costs little.
+//! syllable, as ㄧˇ does after ㄋ — is heavily penalized: symbols that spell
+//! a syllable are one character (ㄋㄧˇ is 你, not 難以 from ㄋ|ㄧˇ; ㄏㄚ is
+//! 哈, not 好啊 from ㄏ|ㄚ). Common abbreviations that do split a syllable
+//! (ㄕㄇㄧㄙ, 什麼意思) are shortcuts: symbols that stand for a text as they
+//! are, a word of their own (shortcuts.csv).
 //!
 //! Candidates come in tiers, like the iPhone keyboard: the whole input
 //! (conversion and common words covering it all), common words covering a
@@ -28,7 +28,7 @@
 //! prefer splitting into learned pieces. A whole input the user committed
 //! before comes back first as-is.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::bopomofo::{is_tone, FIRST_TONE};
 use crate::history::{History, HistoryEntry};
@@ -46,12 +46,15 @@ pub const SLOT_PARTIAL: f64 = -2.0;
 /// Extra for an incomplete slot that ends in a tone: a tone usually means the
 /// syllable is finished, so ㄧˋ should be 一 (ㄧˋ) before 頁 (ㄧㄝˋ).
 pub const SLOT_TONED_INCOMPLETE: f64 = -3.0;
-/// Slot ends where the next symbols would continue it into a fully typed
-/// syllable: with a tone or three symbols (ㄋ|ㄧˇ, ㄊ|ㄧㄢ).
+/// Slot ends where the next symbols would continue it into a longer
+/// syllable (ㄋ|ㄧˇ, ㄊ|ㄧㄢ, ㄏ|ㄚ).
 pub const SLOT_CUT: f64 = -6.0;
-/// Slot ends where the next symbol would continue it into a two-symbol
-/// syllable (ㄇ|ㄧ): as likely abbreviated characters.
-pub const SLOT_CUT_SHORT: f64 = -1.0;
+/// …a syllable with a character at least this frequent: ㄉㄣ has only 㩐,
+/// so ㄉㄣ is still 大恩.
+pub const COMMON_SYLLABLE_FREQ: u32 = 100;
+/// A shortcut scores this much above the best reading of the same symbols
+/// (one word or several).
+pub const SHORTCUT_LIFT: f64 = 0.5;
 /// Added per word; negative values favor fewer, longer words.
 pub const WORD_PENALTY: f64 = 0.0;
 /// A learned word scores this much above the best word for the same symbols.
@@ -89,25 +92,71 @@ pub struct Word {
     pub text: String,
 }
 
+/// Where an edge's text comes from.
+#[derive(Clone, Copy)]
+enum Source {
+    Word(u32),
+    /// Index into the engine's shortcuts.
+    Shortcut(usize),
+    /// An input symbol no word explains; shows the symbol itself.
+    Unknown,
+}
+
 #[derive(Clone, Copy)]
 struct Edge {
     start: usize,
     end: usize,
-    /// `None` is an unknown-symbol edge.
-    entry: Option<u32>,
+    source: Source,
     score: f64,
     /// Some slot is cut short (see [`SLOT_CUT`]).
     cut: bool,
 }
 
+/// Built-in shortcuts: `symbols,text` lines; `#` starts a comment.
+pub const SHORTCUTS: &str = include_str!("../shortcuts.csv");
+
 pub struct Engine {
     lexicon: Lexicon,
     history: History,
+    /// Symbols that stand for a text as they are typed.
+    shortcuts: Vec<(Vec<char>, String)>,
+    /// Syllables (without tone) of the characters at least
+    /// [`COMMON_SYLLABLE_FREQ`] frequent.
+    common_syllables: HashSet<Vec<char>>,
 }
 
 impl Engine {
     pub fn new(lexicon: Lexicon, history: History) -> Self {
-        Engine { lexicon, history }
+        let common_syllables = (0..lexicon.len() as u32)
+            .map(|id| lexicon.entry(id))
+            .filter(|e| e.syllable_count() == 1 && e.freq() >= COMMON_SYLLABLE_FREQ)
+            .flat_map(|e| e.syllables().map(|s| s.base().to_vec()))
+            .collect();
+        let mut engine = Engine {
+            lexicon,
+            history,
+            shortcuts: Vec::new(),
+            common_syllables,
+        };
+        engine.add_shortcuts(SHORTCUTS);
+        engine
+    }
+
+    /// Add `symbols,text` lines (see [`SHORTCUTS`]).
+    pub fn add_shortcuts(&mut self, source: &str) {
+        let lines = source.lines().map(str::trim);
+        self.shortcuts.extend(
+            lines
+                .filter(|l| !l.starts_with('#'))
+                .filter_map(|l| l.split_once(','))
+                .map(|(symbols, text)| {
+                    (
+                        symbols.trim().chars().collect::<Vec<_>>(),
+                        text.trim().to_string(),
+                    )
+                })
+                .filter(|(symbols, text)| !symbols.is_empty() && !text.is_empty()),
+        );
     }
 
     pub fn lexicon(&self) -> &Lexicon {
@@ -124,6 +173,23 @@ impl Engine {
             return Vec::new();
         }
         let spans = self.slot_spans(input);
+        // Where the longest common syllable starting at each position ends.
+        let syllable_end: Vec<usize> = (0..n)
+            .map(|a| {
+                let base = |e: usize| -> Vec<char> {
+                    input[a..e]
+                        .iter()
+                        .copied()
+                        .filter(|&c| !is_tone(c))
+                        .collect()
+                };
+                spans[a]
+                    .iter()
+                    .rev()
+                    .find(|&&e| self.common_syllables.contains(&base(e)))
+                    .map_or(a, |&e| e)
+            })
+            .collect();
 
         // best[i][j]: highest-scoring edge covering input[i..j], for Viterbi.
         let mut best: Vec<Vec<Option<Edge>>> = vec![vec![None; n + 1]; n];
@@ -134,6 +200,7 @@ impl Engine {
             self.walk(
                 input,
                 &spans,
+                &syllable_end,
                 start,
                 start,
                 ROOT,
@@ -155,10 +222,32 @@ impl Engine {
                 best[start][start + 1] = Some(Edge {
                     start,
                     end: start + 1,
-                    entry: None,
+                    source: Source::Unknown,
                     score: UNKNOWN_SYMBOL,
                     cut: false,
                 });
+            }
+        }
+
+        // Shortcuts, above the best reading of their symbols (a learned
+        // word is lifted above them in turn).
+        for (i, (symbols, _)) in self.shortcuts.iter().enumerate() {
+            for start in 0..n {
+                if !input[start..].starts_with(symbols) {
+                    continue;
+                }
+                let end = start + symbols.len();
+                let edge = Edge {
+                    start,
+                    end,
+                    source: Source::Shortcut(i),
+                    score: best_path(&best, start, end) + SHORTCUT_LIFT,
+                    cut: false,
+                };
+                best[start][end] = Some(edge);
+                if start == 0 {
+                    from_zero.push((edge, 0));
+                }
             }
         }
 
@@ -194,10 +283,10 @@ impl Engine {
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut prefix: Vec<(Candidate, bool)> = Vec::new();
         for (edge, _) in from_zero {
-            let entry = self
-                .lexicon
-                .entry(edge.entry.expect("walk only yields words"));
-            let text = entry.text().to_string();
+            let text = self
+                .text(edge.source)
+                .expect("walk and shortcuts only yield words")
+                .to_string();
             if text == full_text {
                 continue;
             }
@@ -384,6 +473,7 @@ impl Engine {
         &self,
         input: &[char],
         spans: &[Vec<usize>],
+        syllable_end: &[usize],
         start: usize,
         pos: usize,
         node: u32,
@@ -398,20 +488,8 @@ impl Engine {
                     .learned(&input[start..pos].iter().collect::<String>())
             };
             // Slots the following symbols would extend into a longer
-            // syllable: (fully typed ones, two-symbol ones).
-            let (cuts, short_cuts) =
-                slots
-                    .iter()
-                    .fold((0, 0), |(full, short), &(a, b)| match spans[a].last() {
-                        Some(&end) if end > b => {
-                            if end - a >= 3 || is_tone(input[end - 1]) {
-                                (full + 1, short)
-                            } else {
-                                (full, short + 1)
-                            }
-                        }
-                        _ => (full, short),
-                    });
+            // common syllable.
+            let cuts = slots.iter().filter(|&&(a, b)| syllable_end[a] > b).count();
             for id in self.lexicon.entries_at(node) {
                 if let Some(score) = self.score_entry(input, slots, id) {
                     // Only look at the text when this span has learned choices.
@@ -427,8 +505,8 @@ impl Engine {
                     let edge = Edge {
                         start,
                         end: pos,
-                        entry: Some(id),
-                        score: score + SLOT_CUT * cuts as f64 + SLOT_CUT_SHORT * short_cuts as f64,
+                        source: Source::Word(id),
+                        score: score + SLOT_CUT * cuts as f64,
                         cut: cuts > 0,
                     };
                     emit(edge, used);
@@ -441,7 +519,7 @@ impl Engine {
         };
         for &end in &spans[pos] {
             slots.push((pos, end));
-            self.walk(input, spans, start, end, child, slots, emit);
+            self.walk(input, spans, syllable_end, start, end, child, slots, emit);
             slots.pop();
         }
     }
@@ -490,6 +568,15 @@ impl Engine {
         Some(score + self.lexicon.log_prob_of(entry.freq()) + WORD_PENALTY)
     }
 
+    /// The text an edge stands for (`None`: show the symbols themselves).
+    fn text(&self, source: Source) -> Option<&str> {
+        match source {
+            Source::Word(id) => Some(self.lexicon.entry(id).text()),
+            Source::Shortcut(i) => Some(&self.shortcuts[i].1),
+            Source::Unknown => None,
+        }
+    }
+
     fn viterbi(&self, input: &[char], best: &[Vec<Option<Edge>>]) -> Candidate {
         let n = input.len();
         let mut score = vec![f64::NEG_INFINITY; n + 1];
@@ -517,9 +604,8 @@ impl Engine {
         let mut text = String::new();
         let mut words = Vec::new();
         for edge in &path {
-            match edge.entry {
-                Some(id) => {
-                    let t = self.lexicon.entry(id).text();
+            match self.text(edge.source) {
+                Some(t) => {
                     text.push_str(t);
                     words.push(Word {
                         typed: input[edge.start..edge.end].iter().collect(),
@@ -536,6 +622,20 @@ impl Engine {
             words,
         }
     }
+}
+
+/// Score of the best path of edges covering input[start..end].
+fn best_path(best: &[Vec<Option<Edge>>], start: usize, end: usize) -> f64 {
+    let mut score = vec![f64::NEG_INFINITY; end + 1];
+    score[start] = 0.0;
+    for to in start + 1..=end {
+        for from in start..to {
+            if let Some(edge) = best[from][to] {
+                score[to] = score[to].max(score[from] + edge.score);
+            }
+        }
+    }
+    score[end]
 }
 
 #[cfg(test)]
@@ -709,5 +809,29 @@ mod tests {
         }
         assert_eq!(e.query_str("ㄍ")[0].text, "古");
         assert_eq!(e.query_str("ㄍㄗㄈㄈ")[0].text, "工作方法");
+    }
+
+    #[test]
+    fn two_symbols_spelling_a_syllable_are_one_character() {
+        let lexicon =
+            Lexicon::parse("哈,500,ㄏㄚ\n回,5000,ㄏㄨㄟˊ\n啊,3000,ㄚ\n好啊,800,ㄏㄠˇ ㄚ\n");
+        let c = Engine::new(lexicon, History::in_memory()).query_str("ㄏㄚ");
+        assert_eq!(c[0].text, "哈", "{:?}", texts(&c));
+        let at = |t: &str| c.iter().position(|c| c.text == t).unwrap();
+        assert!(
+            at("哈") < at("好啊") && at("哈") < at("回"),
+            "{:?}",
+            texts(&c)
+        );
+    }
+
+    #[test]
+    fn shortcuts_stand_for_their_text_alone_and_in_sentences() {
+        let mut e = engine();
+        e.add_shortcuts("# comment\nㄍㄍ,哥哥\n");
+        assert_eq!(e.query_str("ㄍㄍ")[0].text, "哥哥");
+        let c = e.query_str("ㄍㄍㄍㄗ");
+        assert_eq!(c[0].text, "哥哥工作");
+        assert!(c.iter().any(|c| c.text == "哥哥" && c.consumed == 2));
     }
 }

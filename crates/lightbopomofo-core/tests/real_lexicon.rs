@@ -151,8 +151,18 @@ fn most_common_homophone_first() {
 }
 
 #[test]
+fn symbols_spelling_a_syllable_are_one_character() {
+    // ㄏㄚ is 哈: after the whole input come its characters, not 回 or 和.
+    assert_eq!(top("ㄏㄚㄌㄛ", 2), ["哈囉", "哈"]);
+    // ㄉㄣ has only the rare 㩐, so it stays two abbreviated characters.
+    assert_eq!(top("ㄉㄣ", 1), ["大恩"]);
+    // ㄨㄞ would be 外; 我愛你 is a shortcut.
+    assert_eq!(top("ㄕㄖㄎㄌㄨㄞㄋ", 1), ["生日快樂我愛你"]);
+}
+
+#[test]
 fn adjustments_apply() {
-    // lexicon-adjustments.csv adds 什麼意思 and removes 史密斯.
+    // lexicon-adjustments.csv removes 史密斯; shortcuts.csv has ㄕㄇㄧㄙ.
     assert_eq!(top("ㄕㄇㄧㄙ", 1), ["什麼意思"]);
     assert!(!top("ㄕㄇㄧㄙ", 100).contains(&"史密斯".to_string()));
 }
