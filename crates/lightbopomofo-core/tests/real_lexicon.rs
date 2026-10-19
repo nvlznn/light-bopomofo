@@ -164,10 +164,11 @@ fn symbols_spelling_a_syllable_are_one_character() {
 }
 
 #[test]
-fn no_characters_past_the_bmp() {
-    // tsi.csv has 𨉣 for ㄏㄚ, which the system fonts draw as a box.
-    let c = top("ㄏㄚ", 100);
-    assert!(c.iter().all(|t| t.chars().all(|ch| ch <= '\u{FFFF}')), "{c:?}");
+fn rare_characters_only_if_macos_draws_them() {
+    // No macOS font has 𨉣 (ㄏㄚ): it would show as a box.
+    assert!(!top("ㄏㄚ", 100).contains(&"𨉣".to_string()));
+    // 𠄌 is past the BMP too, but PingFang HK draws it.
+    assert!(top("ㄐㄩㄝˋ", 100).contains(&"𠄌".to_string()));
 }
 
 #[test]
