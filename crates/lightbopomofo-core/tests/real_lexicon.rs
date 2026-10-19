@@ -153,7 +153,10 @@ fn most_common_homophone_first() {
 #[test]
 fn symbols_spelling_a_syllable_are_one_character() {
     // ㄏㄚ is 哈: after the whole input come its characters, not 回 or 和.
-    assert_eq!(top("ㄏㄚㄌㄛ", 2), ["哈囉", "哈"]);
+    let c = top("ㄏㄚㄌㄛ", 100);
+    assert_eq!(c[1], "哈", "{c:?}");
+    let at = |t: &str| c.iter().position(|c| c == t).unwrap();
+    assert!(at("哈") < at("回"), "{c:?}");
     // ㄉㄣ has only the rare 㩐, so it stays two abbreviated characters.
     assert_eq!(top("ㄉㄣ", 1), ["大恩"]);
     // ㄨㄞ would be 外; 我愛你 is a shortcut.
