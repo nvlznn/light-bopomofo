@@ -1,5 +1,7 @@
 /target/
 /data/*.csv
+/data/corpus/
+/data/eval/
 /macos/build/
 .DS_Store
 

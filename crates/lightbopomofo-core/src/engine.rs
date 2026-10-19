@@ -29,6 +29,7 @@
 //! before comes back first as-is.
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasherDefault, Hasher};
 
 use crate::bopomofo::{is_tone, FIRST_TONE};
 use crate::history::{History, HistoryEntry};
@@ -121,6 +122,38 @@ struct Edge {
 /// Built-in shortcuts: `symbols,text` lines; `#` starts a comment.
 pub const SHORTCUTS: &str = include_str!("../shortcuts.csv");
 
+/// Words kept per span for the whole-input search with word pairs.
+pub const PAIR_SPAN_WORDS: usize = 8;
+/// Paths kept per input position (each ending in a different word).
+pub const PAIR_BEAM: usize = 8;
+
+/// Word pairs from a corpus: how much likelier a word is right after
+/// another than anywhere (pointwise mutual information, natural log).
+struct Pairs {
+    /// The pair statistics' word for each lexicon entry (`u32::MAX`: none).
+    entry_word: Vec<u32>,
+    bonus: HashMap<u64, f32, BuildHasherDefault<FxHasher>>,
+    weight: f64,
+}
+
+/// FxHash, for integer keys: much faster than the default SipHash.
+#[derive(Default)]
+struct FxHasher(u64);
+
+impl Hasher for FxHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.0 = (self.0.rotate_left(5) ^ n).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
 pub struct Engine {
     lexicon: Lexicon,
     history: History,
@@ -129,6 +162,7 @@ pub struct Engine {
     /// Syllables (without tone) of the characters at least
     /// [`COMMON_SYLLABLE_FREQ`] frequent.
     common_syllables: HashSet<Vec<char>>,
+    pairs: Option<Pairs>,
 }
 
 impl Engine {
@@ -143,9 +177,48 @@ impl Engine {
             history,
             shortcuts: Vec::new(),
             common_syllables,
+            pairs: None,
         };
         engine.add_shortcuts(SHORTCUTS);
         engine
+    }
+
+    /// Use word pairs counted in a corpus (count-words: `words` lines of
+    /// word and count, `pairs` lines of word, next word and count), each
+    /// pair's bonus times `weight`.
+    pub fn load_pairs(&mut self, words: &str, pairs: &str, weight: f64) {
+        let mut ids: HashMap<String, u32> = HashMap::new();
+        let mut counts: Vec<f64> = Vec::new();
+        for line in words.lines() {
+            if let Some((w, c)) = line.split_once('\t') {
+                ids.insert(w.to_string(), counts.len() as u32);
+                counts.push(c.parse().unwrap_or(1.0));
+            }
+        }
+        let total: f64 = counts.iter().sum();
+        let mut bonus = HashMap::default();
+        for line in pairs.lines() {
+            let mut f = line.split('\t');
+            let (Some(a), Some(b), Some(c)) = (f.next(), f.next(), f.next()) else {
+                continue;
+            };
+            let (Some(&a), Some(&b)) = (ids.get(a), ids.get(b)) else {
+                continue;
+            };
+            let c: f64 = c.parse().unwrap_or(0.0);
+            let pmi = (c * total / (counts[a as usize] * counts[b as usize])).ln();
+            if pmi > 0.0 {
+                bonus.insert((a as u64) << 32 | b as u64, pmi as f32);
+            }
+        }
+        let entry_word = (0..self.lexicon.len() as u32)
+            .map(|id| *ids.get(self.lexicon.entry(id).text()).unwrap_or(&u32::MAX))
+            .collect();
+        self.pairs = Some(Pairs {
+            entry_word,
+            bonus,
+            weight,
+        });
     }
 
     /// Add `symbols,text` lines (see [`SHORTCUTS`]).
@@ -199,6 +272,13 @@ impl Engine {
 
         // best[i][j]: highest-scoring edge covering input[i..j], for Viterbi.
         let mut best: Vec<Vec<Option<Edge>>> = vec![vec![None; n + 1]; n];
+        // With word pairs: the best few edges of each span.
+        let with_pairs = self.pairs.is_some();
+        let mut alts: Vec<Vec<Vec<Edge>>> = if with_pairs {
+            vec![vec![Vec::new(); n + 1]; n]
+        } else {
+            Vec::new()
+        };
         let mut from_zero: Vec<(Edge, u32)> = Vec::new();
         let mut learned: Vec<(Edge, u32)> = Vec::new();
         for start in 0..n {
@@ -215,6 +295,14 @@ impl Engine {
                     let cell = &mut best[edge.start][edge.end];
                     if cell.is_none_or(|c| edge.score > c.score) {
                         *cell = Some(edge);
+                    }
+                    if with_pairs {
+                        let list = &mut alts[edge.start][edge.end];
+                        list.push(edge);
+                        if list.len() > 2 * PAIR_SPAN_WORDS {
+                            list.sort_by(|a, b| b.score.total_cmp(&a.score));
+                            list.truncate(PAIR_SPAN_WORDS);
+                        }
                     }
                     if edge.start == 0 {
                         from_zero.push((edge, used));
@@ -280,7 +368,10 @@ impl Engine {
         }
 
         let mut candidates = Vec::new();
-        let full = self.viterbi(input, &best);
+        let full = match &self.pairs {
+            Some(pairs) => self.viterbi_pairs(input, &best, &alts, pairs),
+            None => self.viterbi(input, &best),
+        };
         let full_text = full.text.clone();
         candidates.push(full);
 
@@ -614,9 +705,91 @@ impl Engine {
             pos = edge.start;
         }
         path.reverse();
+        self.path_candidate(input, &path, score[n])
+    }
+
+    /// Like [`viterbi`](Self::viterbi), scoring each word also by the word
+    /// before it. Each position keeps the best few paths, one per last word.
+    fn viterbi_pairs(
+        &self,
+        input: &[char],
+        best: &[Vec<Option<Edge>>],
+        alts: &[Vec<Vec<Edge>>],
+        pairs: &Pairs,
+    ) -> Candidate {
+        struct Path {
+            score: f64,
+            word: Option<u32>,
+            edge: Option<Edge>,
+            /// Index into the paths at `edge.start`.
+            back: usize,
+        }
+        let n = input.len();
+        let word_of = |edge: &Edge| match edge.source {
+            Source::Word(id) => Some(pairs.entry_word[id as usize]).filter(|&w| w != u32::MAX),
+            _ => None,
+        };
+        let mut paths: Vec<Vec<Path>> = (0..=n).map(|_| Vec::new()).collect();
+        paths[0].push(Path {
+            score: 0.0,
+            word: None,
+            edge: None,
+            back: 0,
+        });
+        for end in 1..=n {
+            let mut next: Vec<Path> = Vec::new();
+            for start in 0..end {
+                if paths[start].is_empty() {
+                    continue;
+                }
+                let mut edges: Vec<Edge> = alts[start][end].clone();
+                edges.sort_by(|a, b| b.score.total_cmp(&a.score));
+                edges.truncate(PAIR_SPAN_WORDS);
+                edges.extend(best[start][end]);
+                for edge in &edges {
+                    let word = word_of(edge);
+                    for (i, p) in paths[start].iter().enumerate() {
+                        let bonus = match (p.word, word) {
+                            (Some(a), Some(b)) => pairs
+                                .bonus
+                                .get(&((a as u64) << 32 | b as u64))
+                                .map_or(0.0, |&x| x as f64),
+                            _ => 0.0,
+                        };
+                        next.push(Path {
+                            score: p.score + edge.score + pairs.weight * bonus,
+                            word,
+                            edge: Some(*edge),
+                            back: i,
+                        });
+                    }
+                }
+            }
+            // The best path per last word, then the best few of those.
+            next.sort_by(|a, b| b.score.total_cmp(&a.score));
+            let mut seen = HashSet::new();
+            next.retain(|p| seen.insert((p.word, p.edge.map(|e| e.start))));
+            next.truncate(PAIR_BEAM);
+            paths[end] = next;
+        }
+        let mut path = Vec::new();
+        let (mut pos, mut i) = (n, 0);
+        let score = paths[n].first().map_or(f64::NEG_INFINITY, |p| p.score);
+        while pos > 0 {
+            let p = &paths[pos][i];
+            let edge = p.edge.expect("only the start has no edge");
+            path.push(edge);
+            (pos, i) = (edge.start, p.back);
+        }
+        path.reverse();
+        self.path_candidate(input, &path, score)
+    }
+
+    fn path_candidate(&self, input: &[char], path: &[Edge], score: f64) -> Candidate {
+        let n = input.len();
         let mut text = String::new();
         let mut words = Vec::new();
-        for edge in &path {
+        for edge in path {
             match self.text(edge.source) {
                 Some(t) => {
                     text.push_str(t);
@@ -631,7 +804,7 @@ impl Engine {
         Candidate {
             text,
             consumed: n,
-            score: score[n],
+            score,
             words,
         }
     }
