@@ -478,6 +478,9 @@ fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
         .chain(adjustments.lines())
         .filter_map(parse_line)
         .filter(|e| !removed.contains(&*e.text))
+        // Characters past the BMP (𨉣, CJK Extension B on) are all rare in
+        // tsi.csv, and the system fonts draw them as boxes.
+        .filter(|e| e.text.chars().all(|c| c <= '\u{FFFF}'))
         .collect();
     rank_homophones(&mut entries);
 

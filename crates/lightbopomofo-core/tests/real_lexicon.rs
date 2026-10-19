@@ -164,6 +164,13 @@ fn symbols_spelling_a_syllable_are_one_character() {
 }
 
 #[test]
+fn no_characters_past_the_bmp() {
+    // tsi.csv has 𨉣 for ㄏㄚ, which the system fonts draw as a box.
+    let c = top("ㄏㄚ", 100);
+    assert!(c.iter().all(|t| t.chars().all(|ch| ch <= '\u{FFFF}')), "{c:?}");
+}
+
+#[test]
 fn adjustments_apply() {
     // lexicon-adjustments.csv removes 史密斯; shortcuts.csv has ㄕㄇㄧㄙ.
     assert_eq!(top("ㄕㄇㄧㄙ", 1), ["什麼意思"]);
