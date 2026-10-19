@@ -12,7 +12,7 @@ enum Main {
             let force = arguments.dropFirst(i + 1).first == "--now"
             Task {
                 let code = await Updater.checkInBackground(force: force)
-                print(["0": "up to date", "10": "update available", "1": "check failed"]["\(code)"] ?? "")
+                print(["0": "up to date", "10": "update available", "20": "updated", "1": "check failed"]["\(code)"] ?? "")
                 exit(code)
             }
             dispatchMain()

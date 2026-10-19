@@ -38,7 +38,7 @@ final class AppModel: ObservableObject {
     private let history = History()
 
     /// The input method shipped inside this app.
-    static var bundledInputMethod: URL {
+    nonisolated static var bundledInputMethod: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/Library/Input Methods/LightBopomofo.app")
     }
 
@@ -86,7 +86,9 @@ final class AppModel: ObservableObject {
         if thenInstall { update = .updating("") }
         Task {
             do {
-                guard let version = try await UpdateCheck.available() else {
+                let version = try await UpdateCheck.available()
+                PendingUpdate.record(version)
+                guard let version else {
                     update = thenInstall ? .failed("已經是最新版本") : .idle
                     return
                 }

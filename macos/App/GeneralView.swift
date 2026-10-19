@@ -36,8 +36,8 @@ struct GeneralView: View {
                 Text("輸入法不連網，選字紀錄只存在這台 Mac。")
                     .foregroundStyle(.secondary)
                 Spacer()
-                Toggle("自動檢查更新", isOn: $model.autoCheck)
-                    .help("每天向 GitHub 查一次有沒有新版本，不傳送任何資料。")
+                Toggle("自動更新", isOn: $model.autoCheck)
+                    .help("有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
                 Button("打字教學") { tutorialDone = false }
                     .buttonStyle(.link)
                 Link("官網", destination: URL(string: "https://lightbopomofo.noky.dev")!)

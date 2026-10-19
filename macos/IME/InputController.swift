@@ -25,6 +25,27 @@ final class InputController: IMKInputController {
     /// A commit the system asked for, waiting to see if deactivateServer follows.
     private var pendingCommit: (work: DispatchWorkItem, client: IMKTextInput)?
 
+    /// The input source's menu in the menu bar: a newer version the app
+    /// found (it could not install it by itself), and the app.
+    override func menu() -> NSMenu! {
+        let menu = NSMenu()
+        let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        if let version = PendingUpdate.version(newerThan: current) {
+            menu.addItem(withTitle: "更新到輕注音 \(version)…", action: #selector(update(_:)), keyEquivalent: "")
+        }
+        menu.addItem(withTitle: "輕注音設定…", action: #selector(openApp(_:)), keyEquivalent: "")
+        return menu
+    }
+
+    @objc private func update(_ sender: Any?) {
+        NSWorkspace.shared.open(PendingUpdate.url)
+    }
+
+    @objc private func openApp(_ sender: Any?) {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.noky.lightbopomofo") else { return }
+        NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
     override func recognizedEvents(_ sender: Any!) -> Int {
         Int(NSEvent.EventTypeMask.keyDown.rawValue)
     }
