@@ -1,0 +1,5 @@
+# `vercel deploy` from the repository root uploads only the website (the
+# project's Root Directory), not data/ or target/.
+/*
+!/website
+/website/node_modules
