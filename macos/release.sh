@@ -67,7 +67,8 @@ if [ "${1:-}" = "--publish" ]; then
         git -C "$ROOT" tag -a "v$VERSION" -m "輕注音 $VERSION"
     fi
     git -C "$ROOT" push origin "v$VERSION"
+    RELEASE_DATE=$(TZ=Asia/Taipei date +%y.%m.%d)
     gh release create "v$VERSION" "$DMG" --repo nvlznn/light-bopomofo --verify-tag \
-        --title "輕注音 $VERSION" --notes-file "$ROOT/macos/RELEASE_NOTES.md"
+        --title "$VERSION ($RELEASE_DATE)" --notes-file "$ROOT/macos/RELEASE_NOTES.md"
     # The Windows installer is attached by .github/workflows/release.yml.
 fi
