@@ -585,7 +585,7 @@ footer a { color: var(--ink2); }
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   function cands(s, src) { return ((src || C)[s] || '').split(' ').filter(Boolean); }
-  function human() { return 280 + Math.random() * 200 + (Math.random() < 0.1 ? 300 : 0); }
+  function human() { return 150 + Math.random() * 140 + (Math.random() < 0.1 ? 160 : 0); }
 
   // Pause demos while off screen or in a background tab.
   function watch(el, cb) {
@@ -681,7 +681,7 @@ footer a { color: var(--ink2); }
   function press(k) {
     stage.querySelectorAll('[data-k="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]').forEach(function (el) {
       el.classList.add('down');
-      setTimeout(function () { el.classList.remove('down'); }, 170);
+      setTimeout(function () { el.classList.remove('down'); }, 120);
     });
   }
 
@@ -809,7 +809,7 @@ footer a { color: var(--ink2); }
         // ，。？： commit the first candidate themselves; ！ can't (Shift+1
         // selects while composing), and later candidates take Shift+r.
         if (r === 1 && typeof next === 'string' && next !== '！') continue;
-        await sleep(650);
+        await sleep(360);
         if (!alive()) return;
         if (r === 1 && next !== '！') {
           press('Enter');
@@ -817,10 +817,10 @@ footer a { color: var(--ink2); }
           // Glide to the pick, hold it so the viewer sees what's chosen, then press.
           hero.sel = r - 1;
           renderHero();
-          await sleep(220 + 300);
+          await sleep(360);
           if (!alive()) return;
           press('Shift'); press(String(r));
-          await sleep(150);
+          await sleep(100);
         }
         hero.cur += step.t;
         hero.marked = ''; hero.list = []; hero.sel = 0;
@@ -828,13 +828,13 @@ footer a { color: var(--ink2); }
       }
       // One quote per line; the document grows and scrolls. After all of
       // them, a fresh page for the next shuffled round.
-      await sleep(1600);
+      await sleep(1000);
       if (!alive()) return;
       hero.lines.push(hero.cur);
       hero.cur = '';
       renderHero();
       if (!order.length) {
-        await sleep(2400);
+        await sleep(1600);
         if (!alive()) return;
         mLines.classList.add('fade');
         await sleep(500);
