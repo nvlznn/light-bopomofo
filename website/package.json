@@ -1,0 +1,15 @@
+{
+  "name": "light-bopomofo-website",
+  "private": true,
+  "type": "module",
+  "description": "lightbopomofo.noky.dev: the static site, and the API that keeps the words users share (api/).",
+  "scripts": {
+    "test": "node --test test/api.test.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.2.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10"
+  }
+}

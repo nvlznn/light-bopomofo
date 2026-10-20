@@ -53,6 +53,14 @@ final class Engine {
         lb_reload_history(handle)
     }
 
+    /// Learned choices whose text the lexicon lacks (分享新詞).
+    func newWords() -> [HistoryEntry] {
+        guard let json = lb_new_words(handle) else { return [] }
+        defer { lb_string_free(json) }
+        let data = Data(bytes: json, count: strlen(json))
+        return (try? JSONDecoder().decode([HistoryEntry].self, from: data)) ?? []
+    }
+
     /// 大千 key (unshifted US-layout character) → bopomofo symbol.
     static func bopomofo(forKey key: Character) -> Character? {
         guard key.unicodeScalars.count == 1, let scalar = key.unicodeScalars.first else { return nil }

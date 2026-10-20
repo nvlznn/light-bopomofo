@@ -16,7 +16,11 @@
 
 **Windows 10/11**：同樣從官網或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo-Setup.exe` 並執行。安裝檔還沒有程式碼簽署，看到「Windows 已保護您的電腦」時按「其他資訊」→「仍要執行」。裝完按 Windows 鍵 + 空白鍵切換到「輕注音」；單按 Shift 切換中／英。
 
-輸入法完全不連網，選字紀錄只存在本機，可以在「輕注音」App 裡查看或刪除。「輕注音」App 每天向 GitHub 查一次有沒有新版本，有的話會跳出通知，按一下就更新（可以在 App 關閉）。
+輸入法本身不連網，選字紀錄存在本機，可以在「輕注音」App 裡查看或刪除。macOS 的「輕注音」App 會：
+- 在背景向 GitHub 查新版本並自動安裝（可以關閉「自動更新」）；
+- 預設「分享新詞」：把你選過、詞庫沒有的詞連同打的注音和次數，以隨機裝置編號傳給我們，審核後加進詞庫（可以在打字教學最後一頁或 App 關閉）。詳見[隱私權政策](https://lightbopomofo.noky.dev/privacy.html)。
+
+Windows 有新版本時跳出通知，按一下就更新。
 
 ## 按鍵
 
@@ -34,6 +38,20 @@ cargo test
 cargo run --release -p lightbopomofo-cli -- ㄋㄏㄇ ㄍㄗㄈㄈ
 cargo run --release -p lightbopomofo-cli -- --dachen sca   # 用大千鍵位輸入
 cargo run --release -p lightbopomofo-cli                   # 互動模式；以 : 開頭的行是大千鍵位
+cargo run --release -p lightbopomofo-cli -- --eval eval/tatoeba.tsv   # 正確率（--no-pairs 比較不用詞組）
+```
+
+詞組與語料詞頻（`crates/lightbopomofo-core/word-pairs.tsv`）的產生方式見 `scripts/corpus-text.py`、`count-words`、`scripts/word-pairs.py`。
+
+### 網站與新詞審核
+
+`website/` 是官網（Vercel，Root Directory 為 `website`），`website/api/` 是「分享新詞」的 API，資料存在 Neon Postgres。
+
+```sh
+cd website && npm install && npm test        # API 測試（PGlite，不需要資料庫）
+node test/dev-server.js                      # 本機 http://localhost:3333/admin.html，密碼 dev
+node scripts/admin-password.mjs              # 產生新密碼與 ADMIN_PASSWORD_HASH
+LB_ADMIN_PASSWORD=… scripts/approved-words.py   # 審核通過的詞寫進 lexicon-adjustments.csv
 ```
 
 ## 安裝到 macOS（開發版）

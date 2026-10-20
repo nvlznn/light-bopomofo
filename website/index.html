@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>輕注音輸入法 Light Bopomofo</title>
-<meta name="description" content="把 iPhone 注音的打法搬到電腦：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」。會記住你常打的字。免費、開源，輸入法不連網。">
+<meta name="description" content="把 iPhone 注音的打法搬到電腦：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」。會記住你常打的字。免費、開源。">
 <meta property="og:title" content="輕注音輸入法">
-<meta property="og:description" content="每個字只打第一個注音。ㄋㄏㄇ → 你好嗎。免費、開源，輸入法不連網。">
+<meta property="og:description" content="每個字只打第一個注音。ㄋㄏㄇ → 你好嗎。免費、開源。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lightbopomofo.noky.dev/">
 <meta name="theme-color" content="#f6f8fb">
@@ -513,12 +513,12 @@ footer a { color: var(--ink2); }
 
   <section class="band" id="download">
     <div class="wrap">
-      <div class="head reveal"><h2>免費下載</h2><p>開源・輸入法不連網・紀錄只在你的電腦</p></div>
+      <div class="head reveal"><h2>免費下載</h2><p>免費・開源・選字紀錄留在你的電腦</p></div>
       <div class="dl reveal">
         <div class="card glass main-dl" id="dl-main"></div>
         <div class="card glass gh">
           <div class="row"><svg><use href="#i-gh"/></svg><div><h3>nvlznn/light-bopomofo</h3><p>MIT 授權，歡迎回報問題</p></div></div>
-          <ul><li>原始碼全部公開</li><li>輸入法不連網</li><li>選字紀錄可隨時刪除</li></ul>
+          <ul><li>原始碼全部公開</li><li>分享新詞可隨時關閉</li><li>選字紀錄可隨時刪除</li></ul>
           <a class="btn" href="https://github.com/nvlznn/light-bopomofo"><svg><use href="#i-star"/></svg>在 GitHub 加星<small id="stars2"></small></a>
         </div>
       </div>
@@ -550,7 +550,7 @@ footer a { color: var(--ink2); }
         </details>
         <details>
           <summary>會上傳我打的字嗎？</summary>
-          <p>不會。輸入法完全不連網，選過的詞只存在本機，可以在「輕注音」App 的「選字紀錄」查看或刪除。只有「輕注音」App 每天向 GitHub 查一次新版本，不傳送任何資料，也可以關掉。</p>
+          <p>輸入法本身不連網，你打的字和選字紀錄都留在你的電腦，可以在「輕注音」App 的「選字紀錄」查看或刪除。macOS 版預設開啟「分享新詞」：App 會把你選過、詞庫還沒有的詞（包括一次選出的整串字）連同打的注音和次數，以一組隨機的裝置編號傳給我們，審核後加進詞庫。不會傳送前後文或你在哪個 App 打字。可以在打字教學最後一頁或 App 的「一般」頁關掉。詳見<a href="privacy.html">隱私權政策</a>。</p>
         </details>
         <details>
           <summary>選錯一次，那個字一直排前面？</summary>
@@ -558,7 +558,7 @@ footer a { color: var(--ink2); }
         </details>
         <details>
           <summary>更新與解除安裝</summary>
-          <p>有新版時會跳出通知，按「更新」就自動安裝。解除安裝：<b>macOS</b> 在 App 按「解除安裝…」再把 App 丟到垃圾桶；<b>Windows</b> 到設定 → 應用程式 → 輕注音 → 解除安裝。</p>
+          <p><b>macOS</b> 會在背景下載並安裝新版，裝好後通知你（可以在 App 關閉「自動更新」）；<b>Windows</b> 有新版時會跳出通知，按「更新」就安裝。解除安裝：<b>macOS</b> 在 App 按「解除安裝…」再把 App 丟到垃圾桶；<b>Windows</b> 到設定 → 應用程式 → 輕注音 → 解除安裝。</p>
         </details>
         <details>
           <summary>Windows 有什麼限制？</summary>
@@ -570,8 +570,8 @@ footer a { color: var(--ink2); }
 </main>
 
 <footer class="wrap">
-  <p>輕注音・MIT 授權・<a href="https://github.com/nvlznn/light-bopomofo">GitHub</a>・<a href="https://github.com/nvlznn/light-bopomofo/issues">回報問題</a></p>
-  <p>詞庫來自<a href="https://github.com/chewing/libchewing-data">新酷音（libchewing）</a>，LGPL-2.1-or-later，詳見 <a href="https://github.com/nvlznn/light-bopomofo/blob/main/DATA_LICENSES.md">DATA_LICENSES.md</a></p>
+  <p>輕注音・MIT 授權・<a href="https://github.com/nvlznn/light-bopomofo">GitHub</a>・<a href="https://github.com/nvlznn/light-bopomofo/issues">回報問題</a>・<a href="privacy.html">隱私權政策</a>・<a href="terms.html">使用條款</a></p>
+  <p>詞庫來自<a href="https://github.com/chewing/libchewing-data">新酷音（libchewing）</a>，LGPL-2.1-or-later；詞頻與詞組統計自 <a href="https://huggingface.co/datasets/HuggingFaceFW/fineweb-2">FineWeb-2</a>（ODC-By）。詳見 <a href="https://github.com/nvlznn/light-bopomofo/blob/main/DATA_LICENSES.md">DATA_LICENSES.md</a></p>
 </footer>
 
 <script src="candidates.js"></script>

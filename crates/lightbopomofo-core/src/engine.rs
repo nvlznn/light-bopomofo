@@ -482,6 +482,19 @@ impl Engine {
         self.history.entries()
     }
 
+    /// Learned choices whose text is not a word of the lexicon: words the
+    /// user put together (分享新詞), most recent first.
+    pub fn new_words(&self) -> Vec<HistoryEntry> {
+        let words: HashSet<&str> = (0..self.lexicon.len() as u32)
+            .map(|id| self.lexicon.entry(id).text())
+            .collect();
+        self.history
+            .entries()
+            .into_iter()
+            .filter(|e| !words.contains(e.text.as_str()))
+            .collect()
+    }
+
     /// Forget one learned choice; returns whether it existed.
     pub fn forget(&mut self, typed: &str, text: &str) -> std::io::Result<bool> {
         self.history.forget(typed, text)
@@ -965,6 +978,15 @@ mod tests {
         }
         assert_eq!(e.query_str("ㄍ")[0].text, "古");
         assert_eq!(e.query_str("ㄍㄗㄈㄈ")[0].text, "工作方法");
+    }
+
+    #[test]
+    fn new_words_are_learned_texts_the_lexicon_lacks() {
+        let mut e = engine();
+        e.learn_str("ㄍㄨ", "感悟");
+        e.learn_str("ㄍㄗㄈㄈ", "工作方法");
+        let new: Vec<String> = e.new_words().into_iter().map(|w| w.text).collect();
+        assert_eq!(new, ["工作方法"]);
     }
 
     #[test]

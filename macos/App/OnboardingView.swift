@@ -654,6 +654,8 @@ private struct FinalStep: View {
                 .buttonStyle(.plain)
                 .padding(.top, 18)
             }
+            ShareWordsBox()
+                .padding(.top, 22)
         }
     }
 
@@ -662,6 +664,35 @@ private struct FinalStep: View {
         case .notEnabled, .notInstalled, .failed: return true
         default: return false
         }
+    }
+}
+
+/// 分享新詞, checked to begin with: 開始使用 agrees, unchecking declines.
+private struct ShareWordsBox: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Button { model.shareWords.toggle() } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: model.shareWords ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 16, weight: .semibold))
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
+                    Text("分享新詞：把你選過、詞庫沒有的詞傳給我們，審核後加進詞庫，讓大家更好打。")
+                        .font(.system(size: 13.5))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(model.shareWords ? "已勾選" : "未勾選")
+            Link("隱私權政策", destination: WordSharing.privacyURL)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(.white)
+                .underline()
+        }
+        .foregroundStyle(.white.opacity(0.9))
     }
 }
 

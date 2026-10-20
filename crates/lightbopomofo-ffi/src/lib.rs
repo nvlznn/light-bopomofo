@@ -153,23 +153,41 @@ pub unsafe extern "C" fn lb_history_json(history: *mut LbHistory) -> *mut c_char
             return ptr::null_mut();
         };
         history.0.reload();
-        let mut json = String::from("[");
-        for (i, e) in history.0.entries().iter().enumerate() {
-            if i > 0 {
-                json.push(',');
-            }
-            json.push_str("{\"typed\":");
-            push_json_string(&mut json, &e.typed);
-            json.push_str(",\"text\":");
-            push_json_string(&mut json, &e.text);
-            json.push_str(&format!(
-                ",\"count\":{},\"last_used\":{}}}",
-                e.count, e.last_used
-            ));
-        }
-        json.push(']');
-        CString::new(json).map_or(ptr::null_mut(), CString::into_raw)
+        entries_json(&history.0.entries())
     })
+}
+
+/// Learned choices whose text the lexicon lacks, as `lb_history_json`.
+///
+/// # Safety
+/// `engine` from `lb_engine_new`.
+#[no_mangle]
+pub unsafe extern "C" fn lb_new_words(engine: *mut LbEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(engine) = engine.as_ref() else {
+            return ptr::null_mut();
+        };
+        entries_json(&engine.0.new_words())
+    })
+}
+
+fn entries_json(entries: &[lightbopomofo_core::history::HistoryEntry]) -> *mut c_char {
+    let mut json = String::from("[");
+    for (i, e) in entries.iter().enumerate() {
+        if i > 0 {
+            json.push(',');
+        }
+        json.push_str("{\"typed\":");
+        push_json_string(&mut json, &e.typed);
+        json.push_str(",\"text\":");
+        push_json_string(&mut json, &e.text);
+        json.push_str(&format!(
+            ",\"count\":{},\"last_used\":{}}}",
+            e.count, e.last_used
+        ));
+    }
+    json.push(']');
+    CString::new(json).map_or(ptr::null_mut(), CString::into_raw)
 }
 
 /// Forget one entry. Returns 1 if removed, 0 if not found, -1 on error.

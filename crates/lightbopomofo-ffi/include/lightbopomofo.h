@@ -24,6 +24,9 @@ void lb_learn(LbEngine *engine, const char *symbols, const char *text);
 // Re-read the history file after the settings app changed it.
 void lb_reload_history(LbEngine *engine);
 
+// Learned choices whose text the lexicon lacks (分享新詞), as lb_history_json.
+char *lb_new_words(LbEngine *engine);
+
 // History file on its own, for the settings app (no lexicon loaded).
 typedef struct LbHistory LbHistory;
 LbHistory *lb_history_open(const char *path);

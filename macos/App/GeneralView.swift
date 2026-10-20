@@ -30,13 +30,14 @@ struct GeneralView: View {
             Spacer()
 
             HStack {
-                Text("輸入法不連網，選字紀錄只存在這台 Mac。")
-                    .foregroundStyle(.secondary)
-                Spacer()
                 Toggle("自動更新", isOn: $model.autoCheck)
                     .help("有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
+                Toggle("分享新詞", isOn: $model.shareWords)
+                    .help("把你選過、詞庫沒有的詞（連同打的注音和次數）傳給我們，審核後加進詞庫。不傳送前後文。裝置編號：\(WordSharing.deviceID)")
+                Spacer()
                 Button("打字教學") { tutorialDone = false }
                     .buttonStyle(.link)
+                Link("隱私權", destination: WordSharing.privacyURL)
                 Link("官網", destination: URL(string: "https://lightbopomofo.noky.dev")!)
                 Link("回報問題", destination: URL(string: "https://github.com/nvlznn/light-bopomofo/issues")!)
                 Button("解除安裝…", role: .destructive) { confirmingUninstall = true }

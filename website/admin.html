@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>新詞審核</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #f6f8fb;
+  --ink: #1d1d1f;
+  --ink2: #4f5663;
+  --ink3: #6e7480;
+  --line: rgba(20, 30, 50, .08);
+  --card: rgba(255, 255, 255, .8);
+  --accent: #0066d6;
+  --accent-soft: rgba(0, 102, 214, .09);
+  --ok: #17803d;
+  --no: #b42318;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 18px 48px rgba(16, 24, 40, .07);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+.btn { border: 0; border-radius: 10px; padding: 7px 14px; background: var(--accent-soft); color: var(--accent); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn:hover { filter: brightness(.97); }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.ok { background: rgba(23, 128, 61, .1); color: var(--ok); }
+.btn.no { background: rgba(180, 35, 24, .08); color: var(--no); }
+.btn.plain { background: transparent; color: var(--ink2); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+#login { max-width: 360px; margin: 12vh auto 0; padding: 28px; }
+#login h1 { margin-bottom: 18px; }
+#login label { display: block; font-size: 14px; color: var(--ink2); margin: 12px 0 6px; }
+#login input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+#login input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#login .btn { width: 100%; margin-top: 20px; padding: 10px; }
+.error { color: var(--no); font-size: 14px; min-height: 1.5em; margin: 10px 0 0; }
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.tabs button { border: 0; border-radius: 999px; padding: 6px 14px; background: transparent; color: var(--ink2); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.tabs .n { opacity: .7; margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 13px; color: var(--ink3); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.word { font-size: 20px; font-weight: 600; }
+td.typed { color: var(--ink2); font-size: 14px; }
+td.num { font-variant-numeric: tabular-nums; color: var(--ink2); }
+td.act { text-align: right; white-space: nowrap; }
+td.act .btn + .btn { margin-left: 6px; }
+.empty { padding: 40px; text-align: center; color: var(--ink3); }
+.muted { color: var(--ink3); font-size: 14px; }
+
+@media (max-width: 640px) {
+  thead { display: none; }
+  tr { display: grid; grid-template-columns: 1fr auto; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  tr:last-child { border-bottom: 0; }
+  td { border: 0; padding: 4px 10px; }
+  td.word { grid-column: 1; }
+  td.act { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  td.typed, td.num { grid-column: 1; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <form id="login" class="card" hidden>
+    <h1>新詞審核</h1>
+    <label for="email">帳號</label>
+    <input id="email" type="email" autocomplete="username" value="ino@noky.dev" required>
+    <label for="password">密碼</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button class="btn primary" type="submit">登入</button>
+    <p class="error" id="login-error" role="alert"></p>
+  </form>
+
+  <main id="review" hidden>
+    <header>
+      <h1>新詞審核</h1>
+      <button class="btn plain" id="logout" type="button">登出</button>
+    </header>
+    <p class="muted">使用者選過、詞庫沒有的詞。「加入」的詞由 <code>scripts/approved-words.py</code> 寫進詞庫，跟著下一版發布。</p>
+    <div class="tabs" role="group" aria-label="狀態">
+      <button type="button" data-status="pending" aria-pressed="true">待審<span class="n"></span></button>
+      <button type="button" data-status="approved" aria-pressed="false">已加入<span class="n"></span></button>
+      <button type="button" data-status="rejected" aria-pressed="false">不要<span class="n"></span></button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>詞</th><th>打的注音</th><th>裝置</th><th>次數</th><th>最後出現</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>沒有詞</div>
+    </div>
+  </main>
+</div>
+<script>
+(function () {
+  var status = 'pending';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(path, options) {
+    return fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}))
+      .then(function (r) {
+        if (r.status === 401) { show('login'); throw new Error('not signed in'); }
+        if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.error || r.statusText); });
+        return r.status === 204 ? null : r.json();
+      });
+  }
+
+  function show(which) {
+    $('login').hidden = which !== 'login';
+    $('review').hidden = which !== 'review';
+    if (which === 'login') $('password').focus();
+  }
+
+  function cell(cls, text) {
+    var td = document.createElement('td');
+    td.className = cls;
+    td.textContent = text;
+    return td;
+  }
+
+  function button(label, cls, next, text) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn ' + cls;
+    b.textContent = label;
+    b.onclick = function () {
+      b.disabled = true;
+      api('/api/admin/words', { method: 'POST', body: JSON.stringify({ text: text, status: next }) })
+        .then(load).catch(function () { b.disabled = false; });
+    };
+    return b;
+  }
+
+  function load() {
+    return api('/api/admin/words?status=' + status).then(function (data) {
+      show('review');
+      document.querySelectorAll('.tabs button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.status === status));
+        b.querySelector('.n').textContent = data.counts[b.dataset.status] || 0;
+      });
+      var rows = $('rows');
+      rows.textContent = '';
+      data.words.forEach(function (w) {
+        var tr = document.createElement('tr');
+        tr.appendChild(cell('word', w.text));
+        tr.appendChild(cell('typed', w.typed.join('、')));
+        tr.appendChild(cell('num', w.devices + ' 台'));
+        tr.appendChild(cell('num', w.uses + ' 次'));
+        tr.appendChild(cell('num', new Date(w.last_seen).toLocaleDateString('zh-TW')));
+        var act = cell('act', '');
+        if (status === 'pending') {
+          act.appendChild(button('加入', 'ok', 'approved', w.text));
+          act.appendChild(button('不要', 'no', 'rejected', w.text));
+        } else {
+          act.appendChild(button('改回待審', 'plain', 'pending', w.text));
+        }
+        tr.appendChild(act);
+        rows.appendChild(tr);
+      });
+      $('empty').hidden = data.words.length > 0;
+    });
+  }
+
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.onclick = function () { status = b.dataset.status; load(); };
+  });
+
+  $('login').onsubmit = function (e) {
+    e.preventDefault();
+    $('login-error').textContent = '';
+    fetch('/api/admin/login', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: $('email').value, password: $('password').value })
+    }).then(function (r) {
+      if (r.ok) { $('password').value = ''; return load(); }
+      return r.json().catch(function () { return {}; }).then(function (b) { $('login-error').textContent = b.error || '無法登入'; });
+    });
+  };
+
+  $('logout').onclick = function () {
+    api('/api/admin/logout', { method: 'POST' }).then(function () { show('login'); });
+  };
+
+  load().catch(function () {});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>隱私權政策・輕注音</title>
+<meta name="description" content="輕注音收集哪些資料、怎麼使用、怎麼關閉。">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root { --bg: #f6f8fb; --ink: #1d1d1f; --ink2: #4f5663; --line: rgba(20, 30, 50, .1); --accent: #0066d6;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.75 var(--font); -webkit-font-smoothing: antialiased; }
+main { max-width: 720px; margin: 0 auto; padding: 40px 16px 80px; }
+a { color: var(--accent); }
+h1 { font-size: 30px; line-height: 1.3; margin: 8px 0 4px; }
+h2 { font-size: 20px; margin: 36px 0 8px; }
+.meta { color: var(--ink2); font-size: 15px; margin: 0 0 24px; }
+.back { font-size: 15px; text-decoration: none; }
+table { width: 100%; border-collapse: collapse; font-size: 16px; margin: 8px 0; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { width: 30%; color: var(--ink2); font-weight: 500; }
+li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← 輕注音</a>
+  <h1>隱私權政策</h1>
+  <p class="meta">生效日期：2026 年 10 月 20 日</p>
+
+  <p>輕注音是 Ino Chueh 開發的免費、開源注音輸入法（以下稱「我們」）。這份政策說明輕注音會傳送哪些資料、為什麼、怎麼關閉。原始碼公開於 <a href="https://github.com/nvlznn/light-bopomofo">GitHub</a>，可以自行查證。</p>
+
+  <h2>輸入法本身</h2>
+  <p>輸入法程式不連網。你打的字、選字紀錄都存在你的電腦，可以在「輕注音」App 的「選字紀錄」查看或刪除。</p>
+
+  <h2>分享新詞（macOS，預設開啟）</h2>
+  <p>為了讓詞庫收進大家常用、但詞庫還沒有的新詞，「輕注音」App 會在背景（大約一天一次）把下面這些資料傳到我們的伺服器：</p>
+  <table>
+    <tr><th>詞</th><td>你選過、但詞庫裡沒有的詞。這也包括你一次選出的整串字，例如分段選出「我想」「吃飯」後，記下的「我想吃飯」。</td></tr>
+    <tr><th>打的注音</th><td>你為這個詞打的注音，例如 ㄨㄒㄔㄈ。</td></tr>
+    <tr><th>次數</th><td>你選過這個詞幾次。</td></tr>
+    <tr><th>裝置編號</th><td>App 第一次傳送時隨機產生的一組編號，只用來計算「幾台電腦送過同一個詞」。它不包含、也不連結到你的姓名、帳號、電子郵件或電腦序號。</td></tr>
+    <tr><th>App 版本</th><td>例如 3.0。</td></tr>
+  </table>
+  <p>我們<b>不會</b>收集：你在哪個 App 打字、詞的前後文、你打的其他內容、詞庫已經有的詞、帳號、聯絡資料或位置。</p>
+  <p>這些詞由我們人工審核，通過的會加進詞庫，隨下一版提供給所有使用者。詞本身會因此公開（詞庫是開源的），但不會附上是誰送出的。</p>
+  <p><b>如何關閉：</b>打字教學最後一頁的「分享新詞」勾選框，或「輕注音」App「一般」頁的「分享新詞」開關。關閉後就不會再傳送。</p>
+
+  <h2>自動更新</h2>
+  <p>「輕注音」App 會定期向 GitHub 查詢有沒有新版本，並從 GitHub 下載。這只會向 GitHub 送出一般的網路請求，不包含你的任何資料；GitHub 的資料處理依 <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 隱私權聲明</a>。可以在 App 關閉「自動更新」。</p>
+
+  <h2>網站</h2>
+  <p>本網站由 Vercel 代管，Vercel 會留存一般的存取紀錄（例如 IP 位址、瀏覽器種類），用於網站運作與安全。我們不使用廣告或追蹤程式碼。</p>
+
+  <h2>資料的保存與處理</h2>
+  <ul>
+    <li>分享的新詞存放在由 Vercel 與 Neon 代管的資料庫，只有我們能登入審核頁查看。</li>
+    <li>我們不出售、不出租這些資料，也不用於廣告。</li>
+    <li>資料保存到不再需要為止（例如詞已審核完畢，或停止這項服務）。</li>
+  </ul>
+
+  <h2>你的權利</h2>
+  <p>你可以隨時關閉分享。想要刪除已經傳送、來自你電腦的資料，請寫信到 <a href="mailto:ino@noky.dev">ino@noky.dev</a>，附上「輕注音」App「一般」頁「分享新詞」說明中顯示的裝置編號，我們會刪除這個編號的所有資料。</p>
+
+  <h2>政策更新</h2>
+  <p>政策如有更新，會修改本頁並更新生效日期；重大變更會在新版的發布說明中告知。</p>
+
+  <h2>聯絡我們</h2>
+  <p><a href="mailto:ino@noky.dev">ino@noky.dev</a>，或在 <a href="https://github.com/nvlznn/light-bopomofo/issues">GitHub</a> 回報。</p>
+  <p class="meta">另見 <a href="terms.html">使用條款</a>。</p>
+</main>
+</body>
+</html>

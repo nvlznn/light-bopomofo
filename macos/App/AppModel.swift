@@ -27,8 +27,15 @@ final class AppModel: ObservableObject {
     @Published var autoCheck = Updater.autoCheck {
         didSet {
             Updater.autoCheck = autoCheck
-            Updater.scheduleChecks(autoCheck)
+            Updater.scheduleChecks()
             if autoCheck { Updater.requestPermission() }
+        }
+    }
+    /// 分享新詞 (see WordSharing).
+    @Published var shareWords = WordSharing.enabled {
+        didSet {
+            WordSharing.enabled = shareWords
+            Updater.scheduleChecks()
         }
     }
     @Published private(set) var entries: [HistoryEntry] = []
@@ -58,7 +65,7 @@ final class AppModel: ObservableObject {
             refreshStatus()
         }
         reloadHistory()
-        Updater.scheduleChecks(autoCheck)
+        Updater.scheduleChecks()
         if autoCheck { Updater.requestPermission() }
         if AppModel.updatePending {
             AppModel.updatePending = false

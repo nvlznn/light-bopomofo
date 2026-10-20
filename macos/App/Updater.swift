@@ -32,10 +32,11 @@ enum Updater {
         set { UserDefaults.standard.set(newValue, forKey: "CheckForUpdates") }
     }
 
-    /// Register or remove the background item.
-    static func scheduleChecks(_ on: Bool) {
+    /// Register the background item while it has work (updates or 分享新詞),
+    /// remove it otherwise.
+    static func scheduleChecks() {
         do {
-            if on {
+            if autoCheck || WordSharing.enabled {
                 if agent.status != .enabled { try agent.register() }
             } else if agent.status != .notRegistered {
                 try agent.unregister()
@@ -78,6 +79,7 @@ enum Updater {
     /// (`--now`) skips the setting and the once-in-a-while limits.
     static func checkInBackground(force: Bool) async -> Int32 {
         await updateInputMethodWhenQuiet()  // left waiting by an earlier update
+        await WordSharing.shareIfDue(force: force)
         let defaults = UserDefaults.standard
         let now = Date().timeIntervalSince1970
         if !force, !autoCheck || now < defaults.double(forKey: "LastUpdateCheck") + checkEvery {
