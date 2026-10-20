@@ -42,7 +42,13 @@ const server = createServer(async (req, res) => {
     startSession(fake);
   }
   if (path.startsWith('/api/')) return api(req, res, normalize(path).replace(/^\//, ''));
-  const file = join(ROOT, normalize(path === '/' ? '/index.html' : path));
+  const legacy = path.match(/^\/(admin|privacy|terms|index)\.html$/);
+  if (legacy) {
+    res.writeHead(308, { Location: (legacy[1] === 'index' ? '/' : '/' + legacy[1]) + new URL(req.url, `http://localhost:${PORT}`).search });
+    return res.end();
+  }
+  const filePath = path === '/' ? '/index.html' : extname(path) ? path : path + '.html';
+  const file = join(ROOT, normalize(filePath));
   try {
     const body = await readFile(file);
     res.setHeader('Content-Type', TYPES[extname(file)] || 'application/octet-stream');
@@ -67,4 +73,4 @@ await send('00000000-0000-4000-8000-000000000002', [
 ]);
 await send('00000000-0000-4000-8000-000000000003', [{ text: '貢丸湯', typed: 'ㄍㄨㄊ', count: 2 }]);
 
-server.listen(PORT, () => console.log(`http://localhost:${PORT}/admin.html${signedIn ? ' (signed in)' : ''}`));
+server.listen(PORT, () => console.log(`http://localhost:${PORT}/admin${signedIn ? ' (signed in)' : ''}`));
