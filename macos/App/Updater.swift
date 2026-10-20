@@ -154,6 +154,9 @@ enum Updater {
     // MARK: Install
 
     /// Download `version`, check its signature and replace this app with it.
+    /// Set when this app replaced itself with a newer one (see AppModel).
+    static let updatedInPlaceKey = "UpdatedInPlace"
+
     static func install(_ version: String) async throws {
         let fm = FileManager.default
         let current = Bundle.main.bundleURL
@@ -182,6 +185,8 @@ enum Updater {
         let staged = work.appendingPathComponent(current.lastPathComponent)
         try run("/usr/bin/ditto", app.path, staged.path)
         _ = try fm.replaceItemAt(current, withItemAt: staged)
+        // Not a download by hand: the new app should not open on the tutorial.
+        UserDefaults.standard.set(true, forKey: updatedInPlaceKey)
     }
 
     /// Signed with our Developer ID, as this app, intact.

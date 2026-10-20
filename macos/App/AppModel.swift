@@ -51,10 +51,18 @@ final class AppModel: ObservableObject {
 
     init() {
         installer = Installer(source: AppModel.bundledInputMethod)
-        // A fresh install always opens on the tutorial, even when an earlier
-        // install (since uninstalled) had finished or skipped it.
-        if installer.installedVersion == nil {
-            UserDefaults.standard.set(false, forKey: OnboardingView.doneKey)
+        // A download by hand always opens on the tutorial, even when an
+        // earlier install had finished or skipped it: no input method yet, or
+        // an older one left behind (moving the app to the Trash keeps it).
+        // Not after an update in place, which carries a newer one too.
+        let defaults = UserDefaults.standard
+        let updated = defaults.bool(forKey: Updater.updatedInPlaceKey)
+        defaults.removeObject(forKey: Updater.updatedInPlaceKey)
+        let installed = installer.installedVersion
+        let downloaded = installed == nil
+            || installer.sourceVersion.compare(installed!, options: .numeric) == .orderedDescending
+        if downloaded && !updated {
+            defaults.set(false, forKey: OnboardingView.doneKey)
         }
     }
 
