@@ -5,14 +5,18 @@ use std::sync::OnceLock;
 
 use lightbopomofo_core::bopomofo::FIRST_TONE;
 use lightbopomofo_core::composer::{Composer, Key, KeyResult, MAX_SYMBOLS, PAGE_SIZE};
-use lightbopomofo_core::lexicon::{compile, Lexicon};
+use lightbopomofo_core::lexicon::{compile_with_pairs, Lexicon};
 use lightbopomofo_core::{Engine, History};
 
 fn engine() -> Engine {
     static IMAGE: OnceLock<Vec<u8>> = OnceLock::new();
     let image = IMAGE.get_or_init(|| {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
-        compile(&std::fs::read_to_string(path).expect("run scripts/fetch-lexicon.sh"))
+        let pairs = concat!(env!("CARGO_MANIFEST_DIR"), "/word-pairs.tsv");
+        compile_with_pairs(
+            &std::fs::read_to_string(path).expect("run scripts/fetch-lexicon.sh"),
+            &std::fs::read_to_string(pairs).unwrap(),
+        )
     });
     Engine::new(
         Lexicon::from_image(image.clone()).unwrap(),

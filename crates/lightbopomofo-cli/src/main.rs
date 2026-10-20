@@ -7,8 +7,8 @@
 //!   lb-cli --eval eval/tatoeba.tsv  measure: phrases typed in full and by
 //!                                   first symbols (-n: misses to show)
 //!
-//! Options: --lexicon PATH (default data/tsi.csv), --history PATH, -n COUNT,
-//! --pairs DIR (words.tsv and pairs.tsv from count-words), --pair-weight W
+//! Options: --lexicon PATH (default data/tsi.csv, compiled with the word
+//! pairs; or a lexicon.bin), --no-pairs, --history PATH, -n COUNT
 
 use std::io::{BufRead, Write};
 use std::time::Instant;
@@ -21,8 +21,7 @@ fn main() {
     let mut count = 9;
     let mut dachen_keys = false;
     let mut eval_path: Option<String> = None;
-    let mut pairs_dir: Option<String> = None;
-    let mut pair_weight = 1.0;
+    let mut pairs = true;
     let mut inputs = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -33,15 +32,9 @@ fn main() {
             "-n" => count = args.next().and_then(|n| n.parse().ok()).expect("-n COUNT"),
             "--dachen" => dachen_keys = true,
             "--eval" => eval_path = Some(args.next().expect("--eval FILE")),
-            "--pairs" => pairs_dir = Some(args.next().expect("--pairs DIR")),
-            "--pair-weight" => {
-                pair_weight = args
-                    .next()
-                    .and_then(|w| w.parse().ok())
-                    .expect("--pair-weight W")
-            }
+            "--no-pairs" => pairs = false,
             "-h" | "--help" => {
-                eprintln!("usage: lb-cli [--dachen] [--lexicon PATH] [--history PATH] [-n COUNT] [--eval FILE | INPUT...]");
+                eprintln!("usage: lb-cli [--dachen] [--lexicon PATH] [--no-pairs] [--history PATH] [-n COUNT] [--eval FILE | INPUT...]");
                 return;
             }
             _ => inputs.push(arg),
@@ -49,21 +42,25 @@ fn main() {
     }
 
     let t = Instant::now();
-    let lexicon = Lexicon::load(&lexicon_path).unwrap_or_else(|e| {
-        eprintln!("cannot read {lexicon_path}: {e}\nrun scripts/fetch-lexicon.sh first");
-        std::process::exit(1);
-    });
-    let history = history_path.map_or_else(History::in_memory, History::load);
-    let mut engine = Engine::new(lexicon, history);
-    if let Some(dir) = &pairs_dir {
-        let read = |name: &str| {
-            std::fs::read_to_string(format!("{dir}/{name}")).unwrap_or_else(|e| {
-                eprintln!("cannot read {dir}/{name}: {e}");
-                std::process::exit(1);
-            })
+    let lexicon = if lexicon_path.ends_with(".csv") {
+        let source = std::fs::read_to_string(&lexicon_path).unwrap_or_else(|e| {
+            eprintln!("cannot read {lexicon_path}: {e}\nrun scripts/fetch-lexicon.sh first");
+            std::process::exit(1);
+        });
+        let pairs = if pairs {
+            std::fs::read_to_string(WORD_PAIRS).unwrap_or_default()
+        } else {
+            String::new()
         };
-        engine.load_pairs(&read("words.tsv"), &read("pairs.tsv"), pair_weight);
-    }
+        Lexicon::parse_with_pairs(&source, &pairs)
+    } else {
+        Lexicon::load(&lexicon_path).unwrap_or_else(|e| {
+            eprintln!("cannot read {lexicon_path}: {e}");
+            std::process::exit(1);
+        })
+    };
+    let history = history_path.map_or_else(History::in_memory, History::load);
+    let engine = Engine::new(lexicon, history);
     eprintln!(
         "loaded {} entries in {:.0?}",
         engine.lexicon().len(),
@@ -174,6 +171,12 @@ fn evaluate(engine: &Engine, path: &str, misses: usize) {
         );
     }
 }
+
+/// The word pairs a tsi.csv is compiled with (as build-lexicon does).
+const WORD_PAIRS: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../lightbopomofo-core/word-pairs.tsv"
+);
 
 fn default_lexicon() -> String {
     let repo = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");

@@ -9,8 +9,10 @@ fn engine() -> &'static Engine {
     static ENGINE: OnceLock<Engine> = OnceLock::new();
     ENGINE.get_or_init(|| {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
-        let lexicon =
-            Lexicon::load(path).expect("data/tsi.csv missing: run scripts/fetch-lexicon.sh");
+        let pairs = concat!(env!("CARGO_MANIFEST_DIR"), "/word-pairs.tsv");
+        let source = std::fs::read_to_string(path)
+            .expect("data/tsi.csv missing: run scripts/fetch-lexicon.sh");
+        let lexicon = Lexicon::parse_with_pairs(&source, &std::fs::read_to_string(pairs).unwrap());
         Engine::new(lexicon, History::in_memory())
     })
 }
@@ -62,7 +64,7 @@ fn full_syllable_is_not_split() {
             "{input}: {t:?}"
         );
     }
-    assert_eq!(top("ㄊㄧㄢ", 4), ["天", "填", "田", "甜"]);
+    assert_eq!(top("ㄊㄧㄢ", 4), ["天", "田", "甜", "填"]);
 }
 
 #[test]
@@ -134,8 +136,9 @@ fn long_input_is_fast() {
 
 #[test]
 fn most_common_homophone_first() {
+    // The corpus has 型 alone more often than 行 read ㄒㄧㄥˊ; 行 is second.
+    assert!(top("ㄒㄧㄥˊ", 2).contains(&"行".to_string()));
     for (input, expected) in [
-        ("ㄒㄧㄥˊ", "行"),
         ("ㄉㄜ˙", "的"),
         ("ㄇㄚ˙", "嗎"),
         ("ㄗㄞˋ", "在"),
@@ -152,13 +155,15 @@ fn most_common_homophone_first() {
 
 #[test]
 fn symbols_spelling_a_syllable_are_one_character() {
-    // ㄏㄚ is 哈: after the whole input come its characters, not 回 or 和.
-    let c = top("ㄏㄚㄌㄛ", 100);
-    assert_eq!(c[1], "哈", "{c:?}");
-    let at = |t: &str| c.iter().position(|c| c == t).unwrap();
-    assert!(at("哈") < at("回"), "{c:?}");
+    // ㄏㄚ is 哈: after the whole conversions come its characters, not 回 or 和.
+    let c = engine().query_str("ㄏㄚㄌㄛ");
+    let first_part = c.iter().position(|c| c.consumed < 4).unwrap();
+    assert_eq!(c[first_part].text, "哈", "{:?}", texts(&c));
+    let at = |t: &str| c.iter().position(|c| c.text == t).unwrap();
+    assert!(at("哈") < at("回"), "{:?}", texts(&c));
     // ㄉㄣ has only the rare 㩐, so it stays two abbreviated characters.
-    assert_eq!(top("ㄉㄣ", 1), ["大恩"]);
+    let dn = &top("ㄉㄣ", 1)[0];
+    assert!(dn.chars().count() == 2 && dn != "㩐", "{dn}");
     // ㄨㄞ would be 外; 我愛你 is a shortcut.
     assert_eq!(top("ㄕㄖㄎㄌㄨㄞㄋ", 1), ["生日快樂我愛你"]);
 }

@@ -282,7 +282,8 @@ do {
     // A wrong piece: Esc, then start over.
     let q = Practice(Lesson.tutorial[3], engine: Engine(lexiconPath: lexicon, historyPath: nil)!)
     for s in "ㄇㄇㄒㄒㄋ" { q.handle(.symbol(s)) }
-    q.handle(.next)
+    let wrong = q.composer.candidates.firstIndex { $0.text == "密碼" } ?? 1
+    for _ in 0..<wrong { q.handle(.next) }
     q.handle(.commit)
     check(q.committed == "密碼" && q.nextKey == .escape, "wrong piece asks for Esc: \(q.committed)")
     q.handle(.escape)

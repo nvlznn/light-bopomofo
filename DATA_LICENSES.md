@@ -22,5 +22,15 @@
 - 散布時一併附上 LGPL 全文、著作權聲明、原始出處（上表的 repo 與 commit）、**未修改的原始資料檔 `tsi.csv`**，以及記錄所有修改的 `lexicon-adjustments.csv`；`lexicon.bin` 是從這兩個檔案產生的索引形式，產生工具（`crates/build-lexicon`）也開源。
 - 使用者可以自行重新產生並替換 `lexicon.bin`，這符合 LGPL 允許使用者修改、替換函式庫部分的精神。
 
+## 詞組與語料詞頻：`word-pairs.tsv`
+
+| 項目 | 內容 |
+|---|---|
+| 來源 | FineWeb-2 國語語料 `cmn_Hani`（https://huggingface.co/datasets/HuggingFaceFW/fineweb-2）其中兩個檔，以 OpenCC 轉為台灣繁體 |
+| 授權 | 資料集本身：**Open Data Commons Attribution License (ODC-By) v1.0**，要求標示出處；原始網頁另受 Common Crawl 使用條款約束 |
+| 本專案的使用方式 | 只散布**統計數字**，不散布任何原文：以新酷音詞庫斷詞後，每個詞的出現次數，以及常一起出現的前後詞與其點互資訊（前 200 萬組）。產生方式見 `scripts/corpus-text.py`、`count-words`、`scripts/word-pairs.py`。`build-lexicon` 把它編進 `lexicon.bin`：詞頻與新酷音的頻率各半混合，詞組用來替整句轉換加分 |
+| 標示方式 | 本文件；官網與 README |
+
 ## 不隨安裝檔散布的資料
 - repo 不包含 `tsi.csv`。建置時由 `scripts/fetch-lexicon.sh` 從上述固定的 commit 下載。
+- `eval/tatoeba.tsv`：評估用的日常短句，取自 Tatoeba（https://tatoeba.org，CC BY 2.0 FR），由 `scripts/gen-eval.py` 產生，只用於 `lb-cli --eval`。

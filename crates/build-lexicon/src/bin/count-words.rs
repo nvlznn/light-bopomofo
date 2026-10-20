@@ -2,12 +2,13 @@
 //! row, appears in plain text (scripts/corpus-text.py), for the word-pair
 //! statistics.
 //!
-//!   count-words data/tsi.csv data/corpus < data/corpus/text.txt
+//!   cat data/corpus/text-*.txt | count-words data/tsi.csv data/corpus
+//!   scripts/word-pairs.py data/corpus
 //!
 //! Each line is split into the lexicon's words, the most likely split by
-//! the words' frequencies; a character the lexicon lacks breaks the line.
+//! chewing's frequencies; a character the lexicon lacks breaks the line.
 //! Writes OUT_DIR/words.tsv (word, count) and OUT_DIR/pairs.tsv (word, next
-//! word, count) for pairs seen at least MIN_PAIR times.
+//! word, count; most frequent first) for pairs seen at least MIN_PAIR times.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};

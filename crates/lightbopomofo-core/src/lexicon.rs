@@ -67,18 +67,23 @@ impl Syllable {
 // of 8; all sizes are counts of fixed-size records.
 //
 //   header    MAGIC, then u32 counts (entries, syllables, nodes, children,
-//             node_entries, prefixes, text_bytes), then f64 total frequency
+//             node_entries, prefixes, text_bytes, words, pairs), then f64
+//             total frequency
 //   entries   [text_off u32, syl_start u32, freq u32, text_len u16, n_syl u16]
 //   syllables [base0 u16, base1 u16, base2 u16, tone u16]   (0 = none)
 //   nodes     [child_start u32, child_count u32, entry_start u32, entry_count u32]
 //   children  [symbol u32, node u32]          sorted by symbol within a node
 //   node_entries [entry u32]                  most frequent first
 //   prefixes  [key u64]                       sorted; see `prefix_key`
+//   entry_words [word u32]                    per entry: its text's word
+//   pair_starts [u32; words + 1]              each word's pairs in pair_nexts
+//   pair_nexts  [word u32]                    sorted within a word
+//   pair_bonus  [u8]                          tenths (see `pair_bonus`)
 //   text      UTF-8
 // ---------------------------------------------------------------------------
 
-const MAGIC: &[u8; 8] = b"LBLEX001";
-const HEADER: usize = 48;
+const MAGIC: &[u8; 8] = b"LBLEX002";
+const HEADER: usize = 56;
 const ENTRY: usize = 16;
 const SYLLABLE: usize = 8;
 const NODE: usize = 16;
@@ -127,6 +132,10 @@ struct Sections {
     children: usize,
     node_entries: usize,
     prefixes: usize,
+    entry_words: usize,
+    pair_starts: usize,
+    pair_nexts: usize,
+    pair_bonus: usize,
     text: usize,
     n_entries: usize,
     n_syllables: usize,
@@ -135,6 +144,8 @@ struct Sections {
     n_node_entries: usize,
     n_prefixes: usize,
     n_text: usize,
+    n_words: usize,
+    n_pairs: usize,
 }
 
 pub struct Lexicon {
@@ -242,7 +253,13 @@ impl Lexicon {
 
     /// Build from `tsi.csv` text (compiles in memory).
     pub fn parse(source: &str) -> Self {
-        Self::from_bytes(Bytes::Owned(compile(source))).expect("a freshly compiled image is valid")
+        Self::parse_with_pairs(source, "")
+    }
+
+    /// Build from `tsi.csv` text and word pairs (word-pairs.tsv).
+    pub fn parse_with_pairs(source: &str, pairs: &str) -> Self {
+        Self::from_bytes(Bytes::Owned(compile_with_pairs(source, pairs)))
+            .expect("a freshly compiled image is valid")
     }
 
     /// Open a compiled image held in memory.
@@ -265,7 +282,8 @@ impl Lexicon {
             count(5),
             count(6),
         );
-        let total_freq = f64::from_le_bytes(b[36..44].try_into().unwrap());
+        let (n_words, n_pairs) = (count(7), count(8));
+        let total_freq = f64::from_le_bytes(b[44..52].try_into().unwrap());
         let mut at = HEADER;
         let mut section = |records: usize, size: usize| {
             let start = at;
@@ -279,6 +297,10 @@ impl Lexicon {
             children: section(n_children, CHILD),
             node_entries: section(n_node_entries, 4),
             prefixes: section(n_prefixes, 8),
+            entry_words: section(n_entries, 4),
+            pair_starts: section(n_words + 1, 4),
+            pair_nexts: section(n_pairs, 4),
+            pair_bonus: section(n_pairs, 1),
             text: section(n_text, 1),
             n_entries,
             n_syllables,
@@ -287,6 +309,8 @@ impl Lexicon {
             n_node_entries,
             n_prefixes,
             n_text,
+            n_words,
+            n_pairs,
         };
         if at > b.len() || n_nodes == 0 || !(total_freq.is_finite() && total_freq >= 0.0) {
             return Err(invalid("truncated or empty"));
@@ -340,6 +364,24 @@ impl Lexicon {
         for i in 0..s.n_node_entries {
             if u32_at(b, s.node_entries + i * 4) as usize >= s.n_entries {
                 return Err(invalid("node entry out of range"));
+            }
+        }
+        for i in 0..s.n_entries {
+            if u32_at(b, s.entry_words + i * 4) as usize >= s.n_words {
+                return Err(invalid("entry word out of range"));
+            }
+        }
+        let mut prev = 0;
+        for i in 0..=s.n_words {
+            let start = u32_at(b, s.pair_starts + i * 4) as usize;
+            if start < prev || start > s.n_pairs || (i == s.n_words && start != s.n_pairs) {
+                return Err(invalid("pair starts out of order"));
+            }
+            prev = start;
+        }
+        for i in 0..s.n_pairs {
+            if u32_at(b, s.pair_nexts + i * 4) as usize >= s.n_words {
+                return Err(invalid("pair word out of range"));
             }
         }
         Ok(())
@@ -432,6 +474,37 @@ impl Lexicon {
         false
     }
 
+    /// The word an entry is: entries with the same text (other readings)
+    /// share it.
+    pub fn word(&self, entry: u32) -> u32 {
+        u32_at(&self.bytes, self.s.entry_words + entry as usize * 4)
+    }
+
+    /// Whether the lexicon has word pairs (compiled with them).
+    pub fn has_pairs(&self) -> bool {
+        self.s.n_pairs > 0
+    }
+
+    /// How much likelier word `next` is right after word `word` than
+    /// anywhere (natural log; 0 for pairs not in the lexicon).
+    pub fn pair_bonus(&self, word: u32, next: u32) -> f64 {
+        let (b, s) = (&*self.bytes, self.s);
+        if word as usize >= s.n_words {
+            return 0.0;
+        }
+        let o = s.pair_starts + word as usize * 4;
+        let (mut lo, mut hi) = (u32_at(b, o) as usize, u32_at(b, o + 4) as usize);
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            match u32_at(b, s.pair_nexts + mid * 4).cmp(&next) {
+                std::cmp::Ordering::Equal => return b[s.pair_bonus + mid] as f64 / 10.0,
+                std::cmp::Ordering::Less => lo = mid + 1,
+                std::cmp::Ordering::Greater => hi = mid,
+            }
+        }
+        0.0
+    }
+
     /// Natural log of the entry's unigram probability.
     pub fn log_prob(&self, id: u32) -> f64 {
         self.log_prob_of(self.entry(id).freq())
@@ -464,10 +537,17 @@ struct Node {
 pub const ADJUSTMENTS: &str = include_str!("../lexicon-adjustments.csv");
 
 pub fn compile(source: &str) -> Vec<u8> {
-    compile_with(source, ADJUSTMENTS)
+    compile_with(source, ADJUSTMENTS, "")
 }
 
-fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
+/// Compile with word pairs: lines of a word, then tab-separated "next
+/// bonus" (scripts/word-pairs.py). Pairs with a word not in the lexicon are
+/// left out.
+pub fn compile_with_pairs(source: &str, pairs: &str) -> Vec<u8> {
+    compile_with(source, ADJUSTMENTS, pairs)
+}
+
+fn compile_with(source: &str, adjustments: &str, pairs: &str) -> Vec<u8> {
     let removed: HashSet<&str> = adjustments
         .lines()
         .filter_map(|line| line.strip_prefix('-'))
@@ -480,6 +560,9 @@ fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
         .filter(|e| !removed.contains(&*e.text))
         .collect();
     rank_homophones(&mut entries);
+    if !pairs.is_empty() {
+        use_corpus_counts(&mut entries, pairs);
+    }
 
     let mut nodes = vec![Node {
         children: Vec::new(),
@@ -560,6 +643,48 @@ fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
     }
     let prefix_bytes: Vec<u8> = prefixes.iter().flat_map(|k| k.to_le_bytes()).collect();
 
+    // Words: one per distinct text, numbered in entry order.
+    let mut word_ids: HashMap<&str, u32> = HashMap::new();
+    let entry_words: Vec<u32> = entries
+        .iter()
+        .map(|e| {
+            let next = word_ids.len() as u32;
+            *word_ids.entry(&e.text).or_insert(next)
+        })
+        .collect();
+    let n_words = word_ids.len();
+    let mut word_pairs: Vec<Vec<(u32, u8)>> = vec![Vec::new(); n_words];
+    for line in pairs.lines().filter(|l| !l.starts_with('#')) {
+        let mut fields = line.split('\t');
+        let Some(&word) = fields.next().and_then(|w| word_ids.get(w)) else {
+            continue;
+        };
+        for field in fields.skip(1) {
+            let Some((next, bonus)) = field.split_once(' ') else {
+                continue;
+            };
+            let (Some(&next), Ok(bonus)) = (word_ids.get(next), bonus.parse::<f64>()) else {
+                continue;
+            };
+            let tenths = (bonus * 10.0).round().clamp(1.0, 255.0) as u8;
+            word_pairs[word as usize].push((next, tenths));
+        }
+    }
+    let mut pair_start_bytes = Vec::with_capacity((n_words + 1) * 4);
+    let mut pair_next_bytes = Vec::new();
+    let mut pair_bonus_bytes = Vec::new();
+    for list in &mut word_pairs {
+        list.sort_unstable();
+        list.dedup_by_key(|p| p.0);
+        pair_start_bytes.extend((pair_bonus_bytes.len() as u32).to_le_bytes());
+        for &(next, tenths) in list.iter() {
+            pair_next_bytes.extend(next.to_le_bytes());
+            pair_bonus_bytes.push(tenths);
+        }
+    }
+    pair_start_bytes.extend((pair_bonus_bytes.len() as u32).to_le_bytes());
+    let entry_word_bytes: Vec<u8> = entry_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+
     let mut out = Vec::new();
     out.extend(MAGIC);
     for n in [
@@ -570,6 +695,8 @@ fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
         n_node_entries,
         prefixes.len() as u32,
         text.len() as u32,
+        n_words as u32,
+        pair_bonus_bytes.len() as u32,
     ] {
         out.extend(n.to_le_bytes());
     }
@@ -582,12 +709,58 @@ fn compile_with(source: &str, adjustments: &str) -> Vec<u8> {
         &child_bytes,
         &node_entry_bytes,
         &prefix_bytes,
+        &entry_word_bytes,
+        &pair_start_bytes,
+        &pair_next_bytes,
+        &pair_bonus_bytes,
         &text,
     ] {
         out.extend(section.iter());
         out.resize(align8(out.len()), 0);
     }
     out
+}
+
+/// How much of a word's probability comes from the corpus (the rest from
+/// chewing's frequencies, which also covers words the corpus lacks). The web
+/// corpus leans to news (集團 over 今天 for ㄐㄊ); half keeps everyday words
+/// first, within a point of the best on eval/tatoeba.tsv.
+pub const CORPUS_WEIGHT: f64 = 0.5;
+
+/// Frequencies mixed with the corpus the word pairs were counted in (the
+/// count after each word in word-pairs.tsv), so a word's probability and its
+/// pairs' bonuses agree: together they make a word-pair (bigram) model. A
+/// word's count is shared among its readings as chewing's frequencies share
+/// it.
+fn use_corpus_counts(entries: &mut [Entry], pairs: &str) {
+    let counts: HashMap<&str, u64> = pairs
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut fields = l.split('\t');
+            Some((fields.next()?, fields.next()?.parse().ok()?))
+        })
+        .collect();
+    let mut readings: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, e) in entries.iter().enumerate() {
+        readings.entry(&e.text).or_default().push(i);
+    }
+    let corpus_total: f64 = counts.values().map(|&c| c as f64).sum();
+    let chewing_total: f64 = entries.iter().map(|e| e.freq as f64 + 1.0).sum();
+    let mut freqs = vec![0u32; entries.len()];
+    for (text, ids) in &readings {
+        let count = counts.get(text).copied().unwrap_or(0) as f64;
+        let weights: f64 = ids.iter().map(|&i| entries[i].freq as f64 + 1.0).sum();
+        for &i in ids {
+            let chewing = (entries[i].freq as f64 + 1.0) / chewing_total;
+            let corpus = count * (entries[i].freq as f64 + 1.0) / weights / corpus_total;
+            let p = CORPUS_WEIGHT * corpus + (1.0 - CORPUS_WEIGHT) * chewing;
+            freqs[i] = (p * corpus_total).round().min(u32::MAX as f64) as u32;
+        }
+    }
+    for (e, f) in entries.iter_mut().zip(freqs) {
+        e.freq = f;
+    }
 }
 
 /// Two single-character frequencies within this ratio are treated as tied.
@@ -678,7 +851,32 @@ mod tests {
 
     /// Compiled without 輕注音's adjustments, to test the format alone.
     fn exact(source: &str) -> Lexicon {
-        Lexicon::from_image(compile_with(source, "")).unwrap()
+        Lexicon::from_image(compile_with(source, "", "")).unwrap()
+    }
+
+    #[test]
+    fn word_pairs() {
+        let lex = Lexicon::from_image(compile_with(
+            MINI,
+            "",
+            "# comment\n工\t500\t作 2.4\t嗎 0.1\t無此詞 3\n嗎\t300\t工作 1.0\n工作\t200\n",
+        ))
+        .unwrap();
+        assert!(lex.has_pairs());
+        let word = |t: &str| {
+            (0..lex.len() as u32)
+                .find(|&i| lex.entry(i).text() == t)
+                .map(|i| lex.word(i))
+        };
+        let (gong, ma, work) = (
+            word("工").unwrap(),
+            word("嗎").unwrap(),
+            word("工作").unwrap(),
+        );
+        assert_eq!(lex.pair_bonus(gong, ma), 0.1);
+        assert_eq!(lex.pair_bonus(ma, work), 1.0);
+        assert_eq!(lex.pair_bonus(work, ma), 0.0);
+        assert!(!exact(MINI).has_pairs());
     }
 
     const MINI: &str = "# dc:title,test,\n工作,34279,ㄍㄨㄥ ㄗㄨㄛˋ\n工,19861,ㄍㄨㄥ\n嗎,26437,ㄇㄚ˙\nㄅ,0,ㄅ\n壞行,1,ㄏㄨㄞˋ\n";
@@ -741,7 +939,7 @@ mod tests {
     #[test]
     fn image_round_trips_through_a_file() {
         let path = std::env::temp_dir().join(format!("lb-lexicon-{}.bin", std::process::id()));
-        std::fs::write(&path, compile_with(MINI, "")).unwrap();
+        std::fs::write(&path, compile_with(MINI, "", "")).unwrap();
         let lex = Lexicon::load(&path).unwrap();
         assert_eq!(lex.len(), 3);
         assert!(lex.is_syllable_prefix(&['ㄇ', 'ㄚ']));
@@ -758,7 +956,7 @@ mod tests {
 
     #[test]
     fn rejects_corrupt_images() {
-        let good = compile_with(MINI, "");
+        let good = compile_with(MINI, "", "");
         assert!(Lexicon::from_image(good.clone()).is_ok());
         assert!(Lexicon::from_image(good[..HEADER - 1].to_vec()).is_err());
         assert!(Lexicon::from_image(good[..good.len() / 2].to_vec()).is_err());

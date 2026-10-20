@@ -11,4 +11,7 @@ swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_f
     "$ROOT/macos/Shared/Composer.swift" "$ROOT/macos/App/UpdateCheck.swift" \
     "$ROOT/macos/App/Lesson.swift" \
     "$ROOT/macos/Tests/main.swift" -o "$OUT"
-"$OUT" "$ROOT/data/tsi.csv"
+# The lexicon as shipped: compiled, with the word pairs.
+cargo build --release -p build-lexicon --manifest-path "$ROOT/Cargo.toml"
+"$ROOT/target/release/build-lexicon" "$ROOT/data/tsi.csv" "$OUT-lexicon.bin"
+"$OUT" "$OUT-lexicon.bin"

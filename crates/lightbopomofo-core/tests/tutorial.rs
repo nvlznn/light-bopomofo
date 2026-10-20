@@ -1,14 +1,23 @@
 //! The tutorial's lessons against the real lexicon — the same scenarios as
 //! macos/Tests/main.swift.
 
-use lightbopomofo_core::lexicon::{compile, Lexicon};
+use std::sync::OnceLock;
+
+use lightbopomofo_core::lexicon::{compile_with_pairs, Lexicon};
 use lightbopomofo_core::tutorial::{Practice, LESSONS};
 use lightbopomofo_core::{Engine, History, Key};
 
 fn engine() -> Engine {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
-    let image = compile(&std::fs::read_to_string(path).expect("run scripts/fetch-lexicon.sh"));
-    Engine::new(Lexicon::from_image(image).unwrap(), History::in_memory())
+    static IMAGE: OnceLock<Vec<u8>> = OnceLock::new();
+    let image = IMAGE.get_or_init(|| {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
+        let pairs = concat!(env!("CARGO_MANIFEST_DIR"), "/word-pairs.tsv");
+        compile_with_pairs(
+            &std::fs::read_to_string(path).expect("run scripts/fetch-lexicon.sh"),
+            &std::fs::read_to_string(pairs).unwrap(),
+        )
+    });
+    Engine::new(Lexicon::from_image(image.clone()).unwrap(), History::in_memory())
 }
 
 fn keys(symbols: &str, then: &[Key]) -> Vec<Key> {
@@ -66,7 +75,10 @@ fn wrong_piece_asks_for_esc() {
     for s in "ㄇㄇㄒㄒㄋ".chars() {
         p.handle(&mut e, Key::Symbol(s));
     }
-    p.handle(&mut e, Key::Next);
+    let wrong = e.query_str("ㄇㄇㄒㄒㄋ").iter().position(|c| c.text == "密碼").unwrap();
+    for _ in 0..wrong {
+        p.handle(&mut e, Key::Next);
+    }
     p.handle(&mut e, Key::Commit); // 密碼, not 媽媽
     assert_eq!(p.committed(), "密碼");
     assert_eq!(p.next_key(), Some(Key::Escape));
