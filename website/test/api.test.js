@@ -1,7 +1,7 @@
 // The API against an in-memory Postgres (PGlite): npm test
 
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 
@@ -12,6 +12,7 @@ import adminWords from '../api/admin/words.js';
 import upload from '../api/words.js';
 
 const db = new PGlite();
+after(() => db.close());
 useDatabase(async (text, params) => (await db.query(text, params)).rows);
 process.env.ADMIN_PASSWORD_HASH = hashPassword('right horse', 'aa11');
 process.env.SESSION_SECRET = 'test-secret';
@@ -90,4 +91,57 @@ test('only the admin signs in and reviews', async () => {
   assert.equal((await call(adminWords, { method: 'POST', cookie, body: { text: '貢丸湯', status: 'pending' } })).status, 204);
   assert.equal((await call(adminWords, { cookie })).body.words.length, 1, 'undone');
   assert.equal((await call(exportWords)).status, 401);
+});
+
+test('review filter defaults to two uses and supports custom totals across devices and spellings', async () => {
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const cookie = signed.headers['set-cookie'].split(';')[0];
+  const before = await call(adminWords, { cookie });
+  const send = (n, text, count, typed = 'ㄒㄘ') => call(upload, {
+    method: 'POST', body: { device: device(n), app: '3.1', words: [{ text, typed, count }] },
+  });
+  await send(10, '一次新詞', 1);
+  await send(10, '一次新詞', 1);
+  await send(11, '同機兩次', 2);
+  await send(12, '跨機兩次', 1);
+  await send(13, '跨機兩次', 1);
+  await send(14, '不同注音', 1, 'ㄅㄊ');
+  await send(14, '不同注音', 1, 'ㄅㄊㄓㄧ');
+  const pending = await call(adminWords, { cookie });
+  assert.equal(pending.body.words.some(w => w.text === '一次新詞'), false);
+  for (const text of ['同機兩次', '跨機兩次', '不同注音']) {
+    assert.equal(pending.body.words.find(w => w.text === text)?.uses, 2, text);
+  }
+  assert.equal(pending.body.counts.pending, before.body.counts.pending + 3);
+  const all = await call(adminWords, { cookie, query: { minUses: '1' } });
+  assert.equal(all.body.words.some(w => w.text === '一次新詞'), true);
+  assert.equal(all.body.counts.pending, before.body.counts.pending + 4);
+  const high = await call(adminWords, { cookie, query: { minUses: '3' } });
+  assert.equal(high.body.words.every(w => w.uses >= 3), true);
+  assert.equal(high.body.counts.pending, before.body.counts.pending);
+  for (const minUses of ['0', '-1', '1.5', 'abc', '2147483648', '']) {
+    assert.equal((await call(adminWords, { cookie, query: { minUses } })).status, 400);
+  }
+  for (const status of ['approved', 'rejected']) {
+    const result = await call(adminWords, { method: 'POST', cookie, body: { text: '不存在的詞', status } });
+    assert.equal(result.status, 400);
+  }
+  assert.equal((await call(adminWords, { method: 'POST', cookie, body: { text: '一次新詞', status: 'approved' } })).status, 204);
+  const filteredApproved = await call(adminWords, { cookie, query: { status: 'approved' } });
+  assert.equal(filteredApproved.body.words.length, 0);
+  assert.equal(filteredApproved.body.counts.approved || 0, 0);
+  const allApproved = await call(adminWords, { cookie, query: { status: 'approved', minUses: '1' } });
+  assert.equal(allApproved.body.words.length, 1);
+  assert.equal(allApproved.body.counts.approved, 1);
+  await call(adminWords, { method: 'POST', cookie, body: { text: '一次新詞', status: 'pending' } });
+  assert.equal((await db.query("SELECT * FROM decisions WHERE text = '一次新詞'")).rows.length, 0);
+  await send(10, '一次新詞', 2);
+  const eligible = await call(adminWords, { cookie });
+  assert.equal(eligible.body.words.find(w => w.text === '一次新詞').uses, 2);
+  assert.equal(eligible.body.counts.pending, before.body.counts.pending + 4);
+  assert.equal((await call(adminWords, { method: 'POST', cookie, body: { text: '一次新詞', status: 'approved' } })).status, 204);
+  const approved = await call(adminWords, { cookie, query: { status: 'approved' } });
+  assert.equal(approved.body.words.some(w => w.text === '一次新詞'), true);
+  assert.equal(approved.body.counts.approved, 1);
+  assert.equal((await call(adminWords, { method: 'POST', cookie, body: { text: '一次新詞', status: 'pending' } })).status, 204);
 });

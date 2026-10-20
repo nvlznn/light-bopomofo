@@ -1,5 +1,5 @@
 // GET  /api/admin/words?status=pending|approved|rejected — the words, by how
-//      many devices sent them.
+//      many devices sent them; filtered by minUses (default 2).
 // POST /api/admin/words {"text", "status": "approved"|"rejected"|"pending"}
 //      — decide on a word (pending undoes a decision).
 
@@ -15,16 +15,25 @@ export default handler(['GET', 'POST'], async (req, res) => {
     if (status === 'pending') {
       await query('DELETE FROM decisions WHERE text = $1', [text]);
     } else {
-      await query(
-        `INSERT INTO decisions (text, status) VALUES ($1, $2)
-         ON CONFLICT (text) DO UPDATE SET status = EXCLUDED.status, decided_at = now()`,
+      const saved = await query(
+        `INSERT INTO decisions (text, status)
+         SELECT $1, $2 FROM submissions WHERE text = $1
+         HAVING coalesce(sum(count), 0) >= 1
+         ON CONFLICT (text) DO UPDATE SET status = EXCLUDED.status, decided_at = now()
+         RETURNING text`,
         [text, status],
       );
+      if (saved.length === 0) throw new HttpError(400, '這個詞尚未有輸入紀錄');
     }
     res.status(204).end();
     return;
   }
   const status = STATUSES.includes(req.query?.status) ? req.query.status : 'pending';
+  const rawMinimum = req.query?.minUses ?? '2';
+  const minUses = Number(rawMinimum);
+  if (!/^\d+$/.test(String(rawMinimum)) || !Number.isSafeInteger(minUses) || minUses < 1 || minUses > 2147483647) {
+    throw new HttpError(400, '最低次數必須是 1 到 2147483647 的整數');
+  }
   const rows = await query(
     `SELECT s.text,
             array_agg(DISTINCT s.typed) AS typed,
@@ -35,14 +44,21 @@ export default handler(['GET', 'POST'], async (req, res) => {
      FROM submissions s LEFT JOIN decisions d ON d.text = s.text
      WHERE coalesce(d.status, 'pending') = $1
      GROUP BY s.text, d.status
-     ORDER BY devices DESC, uses DESC, last_seen DESC
+     HAVING sum(s.count) >= $2
+     ORDER BY devices DESC, uses DESC, last_seen DESC, s.text ASC
      LIMIT 1000`,
-    [status],
+    [status, minUses],
   );
   const counts = await query(
-    `SELECT coalesce(d.status, 'pending') AS status, count(DISTINCT s.text)::int AS words
-     FROM submissions s LEFT JOIN decisions d ON d.text = s.text
-     GROUP BY 1`,
+    `SELECT status, count(*)::int AS words
+     FROM (
+       SELECT s.text, coalesce(d.status, 'pending') AS status
+       FROM submissions s LEFT JOIN decisions d ON d.text = s.text
+       GROUP BY s.text, d.status
+       HAVING sum(s.count) >= $1
+     ) eligible
+     GROUP BY status`,
+    [minUses],
   );
-  res.status(200).json({ status, words: rows, counts: Object.fromEntries(counts.map((c) => [c.status, c.words])) });
+  res.status(200).json({ status, minUses, words: rows, counts: Object.fromEntries(counts.map((c) => [c.status, c.words])) });
 });

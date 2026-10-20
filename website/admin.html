@@ -57,9 +57,17 @@ tr:last-child td { border-bottom: 0; }
 td.word { font-size: 20px; font-weight: 600; }
 td.typed { color: var(--ink2); font-size: 14px; }
 td.num { font-variant-numeric: tabular-nums; color: var(--ink2); }
-td.act { text-align: right; white-space: nowrap; }
+td.act { width: 220px; text-align: right; white-space: nowrap; }
 td.act .btn + .btn { margin-left: 6px; }
 .empty { padding: 40px; text-align: center; color: var(--ink3); }
+tr[data-selected="true"] { background: var(--accent-soft); }
+tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.save-state { display: block; width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.5em; font-size: 12px; color: var(--ink3); }
+.save-state.failed { color: var(--no); }
+.review-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+#filters { margin-bottom: 16px; }
+#min-uses { width: 90px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+kbd { font: inherit; font-weight: 600; }
 .muted { color: var(--ink3); font-size: 14px; }
 
 @media (max-width: 640px) {
@@ -90,14 +98,26 @@ td.act .btn + .btn { margin-left: 6px; }
       <h1>新詞審核</h1>
       <button class="btn plain" id="logout" type="button">登出</button>
     </header>
-    <p class="muted">使用者選過、詞庫沒有的詞。「加入」的詞由 <code>scripts/approved-words.py</code> 寫進詞庫，跟著下一版發布。</p>
+    <p class="muted">顯示使用者輸入過、詞庫沒有的詞。次數會跨所有裝置累計。加入的詞會收進下一版詞庫。</p>
+    <form id="filters" class="review-tools">
+      <label for="min-uses">最低累計輸入次數</label>
+      <input id="min-uses" type="number" min="1" max="2147483647" step="1" value="2" required aria-describedby="filter-help">
+      <button id="apply-filter" class="btn" type="submit">套用</button>
+      <span class="muted" id="filter-help">設為 1 可顯示全部；設定會記在此瀏覽器。</span>
+    </form>
     <div class="tabs" role="group" aria-label="狀態">
       <button type="button" data-status="pending" aria-pressed="true">待審<span class="n"></span></button>
       <button type="button" data-status="approved" aria-pressed="false">已加入<span class="n"></span></button>
       <button type="button" data-status="rejected" aria-pressed="false">不要<span class="n"></span></button>
     </div>
+    <div class="review-tools">
+      <p class="muted" id="shortcuts">↑ / ↓ 選詞 · <kbd>A</kbd> 加入 · <kbd>D</kbd> 不要 · <kbd>U</kbd> 撤回。請切換到英文輸入。</p>
+      <button class="btn plain" id="refresh" type="button">重新整理</button>
+    </div>
+    <p class="muted">操作後詞的位置會保留；切換分類或重新整理時才更新清單。</p>
+    <p id="review-message" class="muted" role="status" aria-live="polite"></p>
     <div class="card">
-      <table>
+      <table aria-describedby="shortcuts">
         <thead><tr><th>詞</th><th>打的注音</th><th>裝置</th><th>次數</th><th>最後出現</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -113,7 +133,7 @@ td.act .btn + .btn { margin-left: 6px; }
   function api(path, options) {
     return fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}))
       .then(function (r) {
-        if (r.status === 401) { show('login'); throw new Error('not signed in'); }
+        if (r.status === 401) { show('login'); var error = new Error('登入已過期，請重新登入'); error.unauthorized = true; throw error; }
         if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.error || r.statusText); });
         return r.status === 204 ? null : r.json();
       });
@@ -132,51 +152,196 @@ td.act .btn + .btn { margin-left: 6px; }
     return td;
   }
 
-  function button(label, cls, next, text) {
+  var minUses = 2;
+  try {
+    var savedMinimum = Number(window.localStorage.getItem('lb-review-min-uses'));
+    if (Number.isSafeInteger(savedMinimum) && savedMinimum >= 1 && savedMinimum <= 2147483647) minUses = savedMinimum;
+  } catch (_) {}
+  $('min-uses').value = minUses;
+
+  var entries = [];
+  var counts = {};
+  var selected = -1;
+  var loading = false;
+  var saving = 0;
+  var generation = 0;
+
+  function updateControls() {
+    document.querySelectorAll('.tabs button').forEach(function (b) {
+      b.disabled = saving > 0;
+      b.setAttribute('aria-pressed', String(b.dataset.status === status));
+      b.querySelector('.n').textContent = counts[b.dataset.status] || 0;
+    });
+    $('refresh').disabled = loading || saving > 0;
+    $('logout').disabled = saving > 0;
+    $('min-uses').disabled = saving > 0;
+    $('apply-filter').disabled = saving > 0;
+  }
+
+  function select(index, focus) {
+    if (entries[selected]) {
+      entries[selected].row.setAttribute('data-selected', 'false');
+      entries[selected].row.tabIndex = -1;
+    }
+    selected = index;
+    if (entries[index]) {
+      entries[index].row.setAttribute('data-selected', 'true');
+      entries[index].row.tabIndex = 0;
+    }
+    if (focus && entries[index]) {
+      entries[index].row.focus({ preventScroll: true });
+      if (entries[index].row.scrollIntoView) entries[index].row.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function button(label, cls, next, entry) {
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'btn ' + cls;
     b.textContent = label;
-    b.onclick = function () {
-      b.disabled = true;
-      api('/api/admin/words', { method: 'POST', body: JSON.stringify({ text: text, status: next }) })
-        .then(load).catch(function () { b.disabled = false; });
+    b.disabled = entry.saving || loading;
+    b.onclick = function (e) {
+      e.stopPropagation();
+      decide(entry, next);
     };
     return b;
   }
 
-  function load() {
-    return api('/api/admin/words?status=' + status).then(function (data) {
-      show('review');
-      document.querySelectorAll('.tabs button').forEach(function (b) {
-        b.setAttribute('aria-pressed', String(b.dataset.status === status));
-        b.querySelector('.n').textContent = data.counts[b.dataset.status] || 0;
+  function renderActions(entry) {
+    var act = entry.actions;
+    act.textContent = '';
+    if (entry.status === 'pending') {
+      act.appendChild(button('加入', 'ok', 'approved', entry));
+      act.appendChild(button('不要', 'no', 'rejected', entry));
+    } else {
+      var label = document.createElement('span');
+      label.textContent = entry.status === 'approved' ? '已加入 ' : '不要 ';
+      act.appendChild(label);
+      act.appendChild(button('改回待審', 'plain', 'pending', entry));
+    }
+    var state = document.createElement('span');
+    state.className = 'save-state' + (entry.error ? ' failed' : '');
+    state.setAttribute('role', entry.error ? 'alert' : 'status');
+    state.textContent = entry.saving ? '儲存中…' : entry.error ? '儲存失敗，請重試：' + entry.error : entry.saved ? '已儲存' : '';
+    if (entry.error) state.title = state.textContent;
+    act.appendChild(state);
+  }
+
+  function decide(entry, next, follow) {
+    if (loading || entry.saving || entry.status === next) return;
+    var previous = entry.status;
+    entry.status = next;
+    entry.saving = true;
+    entry.error = '';
+    saving++;
+    renderActions(entry);
+    updateControls();
+    // Keep the row in place and let the next decision start immediately.
+    var index = entries.indexOf(entry);
+    var nextIndex = entries.findIndex(function (w, i) { return i > index && w.status === status && !w.saving; });
+    if (nextIndex < 0) nextIndex = entries.findIndex(function (w) { return w.status === status && !w.saving; });
+    select(nextIndex < 0 ? index : nextIndex, follow);
+    api('/api/admin/words', { method: 'POST', body: JSON.stringify({ text: entry.word.text, status: next }) })
+      .then(function () {
+        counts[previous] = Math.max(0, (counts[previous] || 0) - 1);
+        counts[next] = (counts[next] || 0) + 1;
+        entry.saved = true;
+      }).catch(function (error) {
+        entry.status = previous;
+        entry.error = error.message;
+      }).finally(function () {
+        entry.saving = false;
+        saving--;
+        renderActions(entry);
+        updateControls();
       });
+  }
+
+  function load() {
+    if (saving) return Promise.resolve();
+    var request = ++generation;
+    var requestedStatus = status;
+    loading = true;
+    $('review-message').textContent = '載入中…';
+    updateControls();
+    entries.forEach(renderActions);
+    return api('/api/admin/words?status=' + requestedStatus + '&minUses=' + minUses).then(function (data) {
+      if (request !== generation) return;
+      show('review');
+      counts = data.counts;
+      loading = false;
       var rows = $('rows');
       rows.textContent = '';
-      data.words.forEach(function (w) {
+      entries = data.words.map(function (w) {
         var tr = document.createElement('tr');
+        tr.tabIndex = -1;
         tr.appendChild(cell('word', w.text));
         tr.appendChild(cell('typed', w.typed.join('、')));
         tr.appendChild(cell('num', w.devices + ' 台'));
         tr.appendChild(cell('num', w.uses + ' 次'));
         tr.appendChild(cell('num', new Date(w.last_seen).toLocaleDateString('zh-TW')));
         var act = cell('act', '');
-        if (status === 'pending') {
-          act.appendChild(button('加入', 'ok', 'approved', w.text));
-          act.appendChild(button('不要', 'no', 'rejected', w.text));
-        } else {
-          act.appendChild(button('改回待審', 'plain', 'pending', w.text));
-        }
+        var entry = { word: w, status: w.status || requestedStatus, row: tr, actions: act };
+        renderActions(entry);
+        tr.onclick = function () { select(entries.indexOf(entry), true); };
+        tr.addEventListener('focus', function () { select(entries.indexOf(entry), false); });
         tr.appendChild(act);
         rows.appendChild(tr);
+        return entry;
       });
-      $('empty').hidden = data.words.length > 0;
+      select(entries.length ? 0 : -1, false);
+      $('empty').hidden = entries.length > 0;
+      $('review-message').textContent = '已載入 ' + entries.length + ' 個詞';
+    }).catch(function (error) {
+      if (request === generation) {
+        if (!error.unauthorized) show('review');
+        $('review-message').textContent = '載入失敗，請按重新整理：' + error.message;
+        // Do not apply another tab's actions to rows left from the old tab.
+        entries = [];
+        $('rows').textContent = '';
+        selected = -1;
+      }
+    }).finally(function () {
+      if (request === generation) { loading = false; updateControls(); }
     });
   }
 
   document.querySelectorAll('.tabs button').forEach(function (b) {
-    b.onclick = function () { status = b.dataset.status; load(); };
+    b.onclick = function () {
+      if (saving) return;
+      status = b.dataset.status;
+      load();
+    };
+  });
+  $('refresh').onclick = load;
+  $('filters').onsubmit = function (e) {
+    e.preventDefault();
+    if (saving) return;
+    var value = Number($('min-uses').value);
+    if (!Number.isSafeInteger(value) || value < 1 || value > 2147483647) {
+      $('review-message').textContent = '請輸入至少 1 次的整數';
+      return;
+    }
+    minUses = value;
+    try { window.localStorage.setItem('lb-review-min-uses', String(value)); } catch (_) {}
+    load();
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if ($('review').hidden || loading || e.isComposing || e.keyCode === 229 || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    var key = e.key.toLowerCase();
+    if (key === 'arrowdown' || key === 'arrowup') {
+      e.preventDefault();
+      select(Math.max(0, Math.min(entries.length - 1, selected + (key === 'arrowdown' ? 1 : -1))), true);
+      return;
+    }
+    var entry = entries[selected];
+    if (!entry || entry.saving) return;
+    var next = key === 'a' && entry.status === 'pending' ? 'approved'
+      : key === 'd' && entry.status === 'pending' ? 'rejected'
+      : key === 'u' && entry.status !== 'pending' ? 'pending' : null;
+    if (next) { e.preventDefault(); decide(entry, next, true); }
   });
 
   $('login').onsubmit = function (e) {
@@ -188,11 +353,11 @@ td.act .btn + .btn { margin-left: 6px; }
     }).then(function (r) {
       if (r.ok) { $('password').value = ''; return load(); }
       return r.json().catch(function () { return {}; }).then(function (b) { $('login-error').textContent = b.error || '無法登入'; });
-    });
+    }).catch(function () { $('login-error').textContent = '連線失敗，請重試'; });
   };
 
   $('logout').onclick = function () {
-    api('/api/admin/logout', { method: 'POST' }).then(function () { show('login'); });
+    api('/api/admin/logout', { method: 'POST' }).then(function () { generation++; show('login'); }).catch(function () { $('review-message').textContent = '登出失敗，請重試'; });
   };
 
   load().catch(function () {});
