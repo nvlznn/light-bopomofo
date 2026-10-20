@@ -21,7 +21,7 @@ VENV="$ROOT/target/dmg-venv"
 
 if ! "$VENV/bin/python" -c "import ds_store, mac_alias" 2>/dev/null; then
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet --disable-pip-version-check "ds_store==1.3.3" "mac_alias==2.2.3"
+    "$VENV/bin/pip" install --quiet --disable-pip-version-check "ds_store==1.3.1" "mac_alias==2.2.2"
 fi
 
 rm -rf "$WORK" "$OUT"
