@@ -283,14 +283,16 @@ do {
     check(!Installer.isInputMethodsCopy(URL(fileURLWithPath: "/Volumes/輕注音/LightBopomofo.app")), "disk image copy is the installer")
 }
 
-// The bopomofo itself opens the third page.
+// The bopomofo itself ends the second page (last of all after three symbols).
 do {
     let c = makeComposer()
+    type(c, "ㄍㄗㄈㄈ")
+    check(c.candidates.last?.text == "ㄍㄗㄈㄈ", "four symbols: last")
+    c.reset()
     type(c, "ㄋㄏㄇ")
-    check(c.candidates.count > 18 && c.candidates[18].text == "ㄋㄏㄇ", "ㄋㄏㄇ is 19th: \(c.candidates.prefix(19).map(\.text))")
+    check(c.candidates.count > 18 && c.candidates[17].text == "ㄋㄏㄇ", "ㄋㄏㄇ is 18th: \(c.candidates.prefix(18).map(\.text))")
     _ = c.handle(.pageNext)
-    _ = c.handle(.pageNext)
-    check(c.handle(.select(1)) == KeyResult(handled: true, commit: "ㄋㄏㄇ"), "page 3, shift+1 types ㄋㄏㄇ")
+    check(c.handle(.select(9)) == KeyResult(handled: true, commit: "ㄋㄏㄇ"), "page 2, shift+9 types ㄋㄏㄇ")
     check(c.composingText.isEmpty, "nothing left composing")
 }
 

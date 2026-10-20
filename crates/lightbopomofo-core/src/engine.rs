@@ -24,8 +24,9 @@
 //! front part, common single characters for the first syllable, then
 //! everything else by score.
 //!
-//! The bopomofo itself is always a candidate, first on the third page, to
-//! type the symbols as they are; it is never learned. No other candidate
+//! The bopomofo itself is always a candidate, last on the second page (last
+//! of all for more than three symbols), to type the symbols as they are; it
+//! is never learned. No other candidate
 //! mixes characters with symbols a word couldn't explain.
 //!
 //! History: a word the user chose for exactly the same symbols wins its span
@@ -76,9 +77,11 @@ pub const HISTORY_WEIGHT: f64 = 1.0;
 pub const UNKNOWN_SYMBOL: f64 = -50.0;
 /// Upper bound on returned candidates.
 pub const MAX_CANDIDATES: usize = 100;
-/// Where the bopomofo itself goes: first on the third page of the candidate
-/// window, or last when there are fewer candidates.
-pub const RAW_POSITION: usize = 2 * crate::composer::PAGE_SIZE;
+/// Where the bopomofo itself goes: last on the second page of the candidate
+/// window (or last when there are fewer candidates)…
+pub const RAW_POSITION: usize = 2 * crate::composer::PAGE_SIZE - 1;
+/// …for input of up to this many symbols; longer input has it last of all.
+pub const RAW_SHORT: usize = 3;
 /// Tier limits: (score margin below the tier's best, maximum count).
 /// Whole-input words.
 pub const TIER_WHOLE: (f64, usize) = (3.0, 10);
@@ -432,12 +435,16 @@ impl Engine {
                 },
             );
         }
-        // The symbols as typed, first on the third page; no other candidate
-        // shows symbols.
+        // The symbols as typed (see RAW_POSITION); no other candidate shows
+        // symbols.
         let raw: String = input.iter().collect();
         candidates.retain(|c| !c.text.chars().any(crate::bopomofo::is_symbol));
         candidates.truncate(MAX_CANDIDATES - 1);
-        let at = candidates.len().min(RAW_POSITION);
+        let at = if n > RAW_SHORT {
+            candidates.len()
+        } else {
+            candidates.len().min(RAW_POSITION)
+        };
         candidates.insert(
             at,
             Candidate {

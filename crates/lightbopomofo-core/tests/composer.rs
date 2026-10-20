@@ -254,17 +254,16 @@ fn switching_language_drops_the_composition() {
 }
 
 #[test]
-fn bopomofo_itself_opens_the_third_page_and_is_not_learned() {
+fn bopomofo_itself_ends_the_second_page_and_is_not_learned() {
     let (mut e, mut c) = (engine(), Composer::new());
     typing(&mut c, &mut e, "ㄋㄏㄇ");
     assert!(c.candidates().len() > 2 * PAGE_SIZE);
-    assert_eq!(c.candidates()[2 * PAGE_SIZE].text, "ㄋㄏㄇ");
+    assert_eq!(c.candidates()[2 * PAGE_SIZE - 1].text, "ㄋㄏㄇ");
     let raw = c.candidates().iter().filter(|x| x.text == "ㄋㄏㄇ").count();
     assert_eq!(raw, 1);
-    // Two pages on, Shift+1 types the symbols; they are not learned.
+    // A page on, Shift+9 types the symbols; they are not learned.
     c.handle(&mut e, Key::PageNext);
-    c.handle(&mut e, Key::PageNext);
-    assert_eq!(c.handle(&mut e, Key::Select(1)), handled("ㄋㄏㄇ"));
+    assert_eq!(c.handle(&mut e, Key::Select(PAGE_SIZE)), handled("ㄋㄏㄇ"));
     assert!(c.is_empty());
     assert!(e.history_entries().is_empty());
     typing(&mut c, &mut e, "ㄋㄏㄇ");
@@ -277,11 +276,10 @@ fn bopomofo_itself_is_last_when_there_are_few() {
     for input in ["ㄋ", "ㄦˋ", "ㄋㄏㄇ", "ㄍㄗㄈㄈ", "ㄖㄖㄖㄖㄖㄖㄖㄖ"] {
         let candidates = e.query_str(input);
         let at = candidates.iter().position(|x| x.text == input);
-        assert_eq!(
-            at,
-            Some((candidates.len() - 1).min(2 * PAGE_SIZE)),
-            "{input}"
-        );
+        let last = candidates.len() - 1;
+        // Last of all after three symbols, else last on the second page.
+        let want = if input.chars().count() > 3 { last } else { last.min(2 * PAGE_SIZE - 1) };
+        assert_eq!(at, Some(want), "{input}");
     }
 }
 
