@@ -20,6 +20,7 @@ struct GeneralView: View {
                         KeyRow(keys: "← →", action: "選字")
                         KeyRow(keys: "Shift + 1–9", action: "直接選第幾個")
                         KeyRow(keys: "[ ]", action: "換頁")
+                        KeyRow(keys: "↓", action: "展開更多候選")
                         KeyRow(keys: "Esc", action: "清空")
                     }
                 }

@@ -108,6 +108,38 @@ do {
     check(key(47, both, ".") == .punctuation("》"), "Shift+Option+.")
     check(key(47, .option, ".") == .punctuation("．"), "Option+.")
     check(key(0, both, "a") == .other, "Shift+Option+letter goes to the app")
+    check(key(125, .numericPad, "") == .down && key(126, .numericPad, "") == .up, "↓ ↑")
+    check(key(123, .numericPad, "") == .previous && key(124, .numericPad, "") == .next, "← →")
+}
+
+// ↓ expands the candidates into a grid of 6 columns.
+do {
+    let c = makeComposer()
+    type(c, "ㄋ")
+    let cols = Composer.gridColumns
+    check(c.candidates.count > cols * Composer.gridRows, "ㄋ fills more than a screen of grid")
+    check(c.handle(.down) == KeyResult(handled: true) && c.expanded && c.selected == 0, "↓ expands")
+    _ = c.handle(.down)
+    check(c.selected == cols, "↓ a row down: \(c.selected)")
+    _ = c.handle(.next)
+    check(c.selected == cols + 1, "→ one right")
+    _ = c.handle(.up)
+    check(c.selected == 1 && c.expanded, "↑ a row up")
+    _ = c.handle(.up)
+    check(!c.expanded && c.selected == 1, "↑ from the top row collapses")
+    _ = c.handle(.down)
+    _ = c.handle(.pageNext)
+    check(c.selected == cols * Composer.gridRows && c.gridTop == 1, "] a screen down, scrolled: \(c.selected) top \(c.gridTop)")
+    _ = c.handle(.escape)
+    check(!c.expanded && !c.isEmpty, "Esc collapses, keeps the composition")
+    _ = c.handle(.down)
+    _ = c.handle(.down)
+    let second = c.candidates[c.selected / cols * cols + 1].text
+    check(c.handle(.select(2)).commit == second, "Shift+2 picks from the selected row")
+    type(c, "ㄋ")
+    _ = c.handle(.down)
+    type(c, "ㄏ")
+    check(!c.expanded, "typing collapses")
 }
 
 // Backspace and Escape.

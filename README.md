@@ -23,6 +23,7 @@
 | ← → Tab | 選字 |
 | Shift + 1–9 | 直接選 |
 | [ ] PageUp PageDown | 換頁 |
+| ↓ | 展開更多候選（macOS） |
 
 ## 開發
 

@@ -54,8 +54,10 @@ extension Key {
         case 36, 76: return .commit  // return, keypad enter
         case 51: return .backspace
         case 53: return .escape
-        case 123, 126: return .previous  // ←, ↑
-        case 124, 125: return .next  // →, ↓
+        case 123: return .previous  // ←
+        case 124: return .next  // →
+        case 126: return .up  // ↑
+        case 125: return .down  // ↓: the grid
         case 48: return flags.contains(.shift) ? .previous : .next  // tab
         case 116: return .pagePrevious  // PageUp
         case 121: return .pageNext  // PageDown

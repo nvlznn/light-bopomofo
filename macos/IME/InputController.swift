@@ -118,6 +118,8 @@ final class InputController: IMKInputController {
 
         var caret = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &caret)
-        CandidatePanel.shared.show(composer.candidates.map(\.text), selected: composer.selected, caret: caret)
+        CandidatePanel.shared.show(
+            composer.candidates.map(\.text), selected: composer.selected,
+            grid: composer.expanded ? composer.gridTop : nil, caret: caret)
     }
 }

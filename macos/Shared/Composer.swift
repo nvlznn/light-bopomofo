@@ -6,8 +6,10 @@ enum Key: Equatable {
     case commit  // Enter: commit the selected candidate
     case backspace
     case escape
-    case previous  // ←, ↑, Shift+Tab
-    case next  // →, ↓, Tab
+    case previous  // ←, Shift+Tab
+    case next  // →, Tab
+    case up  // ↑: previous, or a row up in the grid (collapsing it from the top row)
+    case down  // ↓: expand the candidates into a grid, then a row down
     case select(Int)  // Shift+1–9 while composing: commit that candidate of the current page
     case pagePrevious  // [, PageUp
     case pageNext  // ], PageDown
@@ -36,6 +38,12 @@ final class Composer {
     private(set) var symbols: [Character] = []
     private(set) var candidates: [Candidate] = []
     private(set) var selected = 0
+    /// Columns and visible rows of the expanded grid (↓).
+    static let gridColumns = 6
+    static let gridRows = 5
+    /// Whether the candidates are shown as a grid, and its first visible row.
+    private(set) var expanded = false
+    private(set) var gridTop = 0
 
     /// What this composition has committed so far, learned as a whole when it
     /// ends after several partial selections (工作 + 方法 → 工作方法).
@@ -78,29 +86,57 @@ final class Composer {
             return KeyResult(handled: true)
         case .escape:
             guard !isEmpty else { return KeyResult(handled: false) }
-            reset()
+            if expanded {
+                collapse()  // Esc leaves the grid first
+            } else {
+                reset()
+            }
             return KeyResult(handled: true)
         case .previous:
             guard !isEmpty else { return KeyResult(handled: false) }
-            selected = max(0, selected - 1)
+            move(to: selected - 1)
             return KeyResult(handled: true)
         case .next:
             guard !isEmpty else { return KeyResult(handled: false) }
-            selected = min(candidates.count - 1, selected + 1)
+            move(to: selected + 1)
+            return KeyResult(handled: true)
+        case .up:
+            guard !isEmpty else { return KeyResult(handled: false) }
+            if !expanded {
+                move(to: selected - 1)
+            } else if selected < Composer.gridColumns {
+                collapse()
+            } else {
+                move(to: selected - Composer.gridColumns)
+            }
+            return KeyResult(handled: true)
+        case .down:
+            guard !isEmpty else { return KeyResult(handled: false) }
+            if expanded {
+                // Into the last row when the one below is short.
+                let lastRow = (candidates.count - 1) / Composer.gridColumns
+                let row = selected / Composer.gridColumns
+                if row < lastRow { move(to: min(selected + Composer.gridColumns, candidates.count - 1)) }
+            } else if candidates.count > 1 {
+                expanded = true
+                gridTop = selected / Composer.gridColumns
+            }
             return KeyResult(handled: true)
         case .select(let n):
             guard !isEmpty else { return KeyResult(handled: false) }
-            let index = selected / Composer.pageSize * Composer.pageSize + n - 1
-            guard (1...Composer.pageSize).contains(n), index < candidates.count else {
+            let width = expanded ? Composer.gridColumns : Composer.pageSize
+            let index = selected / width * width + n - 1
+            guard (1...width).contains(n), index < candidates.count else {
                 return KeyResult(handled: true)
             }
             selected = index
             return KeyResult(handled: true, commit: commitSelected())
         case .pagePrevious, .pageNext:
             guard !isEmpty else { return KeyResult(handled: false) }
-            let page = selected / Composer.pageSize
-            let last = max(candidates.count - 1, 0) / Composer.pageSize
-            selected = (key == .pageNext ? min(page + 1, last) : max(page - 1, 0)) * Composer.pageSize
+            let size = expanded ? Composer.gridColumns * Composer.gridRows : Composer.pageSize
+            let page = selected / size
+            let last = max(candidates.count - 1, 0) / size
+            move(to: (key == .pageNext ? min(page + 1, last) : max(page - 1, 0)) * size)
             return KeyResult(handled: true)
         case .punctuation(let p):
             // While composing, punctuation is ignored (as in the system 注音).
@@ -164,5 +200,20 @@ final class Composer {
     private func refresh() {
         candidates = isEmpty ? [] : engine.query(composingText)
         selected = 0
+        collapse()
+    }
+
+    /// Select `index` (clamped), scrolling the grid to keep it in view.
+    private func move(to index: Int) {
+        selected = min(max(index, 0), max(candidates.count - 1, 0))
+        guard expanded else { return }
+        let row = selected / Composer.gridColumns
+        if row < gridTop { gridTop = row }
+        if row >= gridTop + Composer.gridRows { gridTop = row - Composer.gridRows + 1 }
+    }
+
+    private func collapse() {
+        expanded = false
+        gridTop = 0
     }
 }

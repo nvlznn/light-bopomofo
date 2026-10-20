@@ -1,6 +1,7 @@
 import Cocoa
 
-/// Horizontal candidate strip near the caret: up to 9 per page, numbered.
+/// The candidates near the caret: a strip of up to 9 per page, numbered, or
+/// (after ↓) a grid of 6 columns, numbered along the selected row.
 final class CandidatePanel {
     static let shared = CandidatePanel()
     static let perPage = Composer.pageSize
@@ -21,15 +22,30 @@ final class CandidatePanel {
         panel.contentView = view
     }
 
-    func show(_ candidates: [String], selected: Int, caret: NSRect) {
+    /// `grid`: the first visible row of the grid, or nil for the strip.
+    func show(_ candidates: [String], selected: Int, grid: Int?, caret: NSRect) {
         guard !candidates.isEmpty else { return hide() }
-        let page = selected / CandidatePanel.perPage
-        let start = page * CandidatePanel.perPage
-        let end = min(start + CandidatePanel.perPage, candidates.count)
-        let pages = (candidates.count + CandidatePanel.perPage - 1) / CandidatePanel.perPage
-        view.items = Array(candidates[start..<end])
-        view.selected = selected - start
-        view.pageLabel = pages > 1 ? "\(page + 1)/\(pages)" : nil
+        if let top = grid {
+            let columns = Composer.gridColumns
+            let start = top * columns
+            let end = min(start + columns * Composer.gridRows, candidates.count)
+            view.rows = stride(from: start, to: end, by: columns).map {
+                Array(candidates[$0..<min($0 + columns, end)])
+            }
+            view.selected = (row: (selected - start) / columns, column: (selected - start) % columns)
+            view.pageLabel = nil
+            view.more = end < candidates.count
+        } else {
+            let page = selected / CandidatePanel.perPage
+            let start = page * CandidatePanel.perPage
+            let end = min(start + CandidatePanel.perPage, candidates.count)
+            let pages = (candidates.count + CandidatePanel.perPage - 1) / CandidatePanel.perPage
+            view.rows = [Array(candidates[start..<end])]
+            view.selected = (row: 0, column: selected - start)
+            view.pageLabel = pages > 1 ? "\(page + 1)/\(pages)" : nil
+            view.more = candidates.count > 1
+        }
+        view.isGrid = grid != nil
         let size = view.fittingSize
         panel.setContentSize(size)
         panel.setFrameOrigin(origin(for: size, caret: caret))
@@ -62,23 +78,38 @@ final class CandidatePanel {
 }
 
 private final class CandidateView: NSView {
-    var items: [String] = []
-    var selected = 0
+    var rows: [[String]] = []
+    var selected = (row: 0, column: 0)
     var pageLabel: String?
+    var isGrid = false
+    /// Strip: more candidates than shown (↓ expands); grid: more rows below.
+    var more = false
 
     private let textFont = NSFont.systemFont(ofSize: 18)
     private let indexFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
     private let padding: CGFloat = 6
     private let cellPadding: CGFloat = 7
-    private let height: CGFloat = 34
+    private let rowHeight: CGFloat = 34
+    private let hint = "⌄"
 
     override var isFlipped: Bool { true }
 
     override var fittingSize: NSSize {
-        var width = padding * 2
-        for (i, _) in items.enumerated() { width += cellWidth(i) }
-        if let pageLabel { width += label(pageLabel, font: indexFont, color: .secondaryLabelColor).size().width + cellPadding * 2 }
-        return NSSize(width: ceil(width), height: height)
+        var width = padding * 2 + columnWidths.reduce(0, +)
+        if !isGrid {
+            if let pageLabel { width += size(pageLabel, indexFont).width + cellPadding * 2 }
+            if more { width += size(hint, indexFont).width + cellPadding * 2 }
+        }
+        let extra: CGFloat = isGrid && more ? 14 : 0
+        return NSSize(width: ceil(width), height: rowHeight * CGFloat(rows.count) + extra)
+    }
+
+    /// Strip: each cell fits its text; grid: each column fits its widest cell.
+    private var columnWidths: [CGFloat] {
+        let columns = rows.map(\.count).max() ?? 0
+        return (0..<columns).map { c in
+            rows.compactMap { $0.indices.contains(c) ? cellWidth(c, $0[c]) : nil }.max() ?? 0
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -88,38 +119,63 @@ private final class CandidateView: NSView {
         NSColor.separatorColor.setStroke()
         background.stroke()
 
-        var x = padding
-        for (i, text) in items.enumerated() {
-            let w = cellWidth(i)
-            let isSelected = i == selected
-            if isSelected {
-                let cell = NSRect(x: x, y: 4, width: w, height: height - 8)
-                NSColor.selectedContentBackgroundColor.setFill()
-                NSBezierPath(roundedRect: cell, xRadius: 5, yRadius: 5).fill()
+        let widths = columnWidths
+        for (r, row) in rows.enumerated() {
+            let y = CGFloat(r) * rowHeight
+            if r > 0 {
+                NSColor.separatorColor.setFill()
+                NSRect(x: padding, y: y, width: bounds.width - padding * 2, height: 0.5).fill()
             }
-            let fg: NSColor = isSelected ? .alternateSelectedControlTextColor : .labelColor
-            let dim: NSColor = isSelected ? .alternateSelectedControlTextColor : .secondaryLabelColor
-            let index = label("\(i + 1)", font: indexFont, color: dim)
-            let word = label(text, font: textFont, color: fg)
-            index.draw(at: NSPoint(x: x + cellPadding, y: (height - index.size().height) / 2))
-            word.draw(at: NSPoint(
-                x: x + cellPadding + index.size().width + 3,
-                y: (height - word.size().height) / 2))
-            x += w
+            var x = padding
+            for (c, text) in row.enumerated() {
+                let w = widths[c]
+                let isSelected = (r, c) == selected
+                if isSelected {
+                    NSColor.selectedContentBackgroundColor.setFill()
+                    NSBezierPath(roundedRect: NSRect(x: x, y: y + 4, width: w, height: rowHeight - 8),
+                                 xRadius: 5, yRadius: 5).fill()
+                }
+                let fg: NSColor = isSelected ? .alternateSelectedControlTextColor : .labelColor
+                let dim: NSColor = isSelected ? .alternateSelectedControlTextColor : .secondaryLabelColor
+                var textX = x + cellPadding
+                if r == selected.row {  // numbers go with the selected row (Shift + 1–9)
+                    let index = label("\(c + 1)", indexFont, dim)
+                    index.draw(at: NSPoint(x: textX, y: y + (rowHeight - index.size().height) / 2))
+                    textX += index.size().width + 3
+                } else {
+                    textX += size("\(c + 1)", indexFont).width + 3
+                }
+                let word = label(text, textFont, fg)
+                word.draw(at: NSPoint(x: textX, y: y + (rowHeight - word.size().height) / 2))
+                x += w
+            }
+            if !isGrid {
+                if let pageLabel {
+                    let page = label(pageLabel, indexFont, .secondaryLabelColor)
+                    page.draw(at: NSPoint(x: x + cellPadding, y: (rowHeight - page.size().height) / 2))
+                    x += page.size().width + cellPadding * 2
+                }
+                if more {
+                    let more = label(hint, indexFont, .tertiaryLabelColor)
+                    more.draw(at: NSPoint(x: x + cellPadding, y: (rowHeight - more.size().height) / 2))
+                }
+            }
         }
-        if let pageLabel {
-            let page = label(pageLabel, font: indexFont, color: .secondaryLabelColor)
-            page.draw(at: NSPoint(x: x + cellPadding, y: (height - page.size().height) / 2))
+        if isGrid && more {
+            let more = label(hint, indexFont, .tertiaryLabelColor)
+            more.draw(at: NSPoint(x: (bounds.width - more.size().width) / 2, y: bounds.height - 15))
         }
     }
 
-    private func cellWidth(_ i: Int) -> CGFloat {
-        let index = label("\(i + 1)", font: indexFont, color: .labelColor).size().width
-        let word = label(items[i], font: textFont, color: .labelColor).size().width
-        return index + 3 + word + cellPadding * 2
+    private func cellWidth(_ column: Int, _ text: String) -> CGFloat {
+        size("\(column + 1)", indexFont).width + 3 + size(text, textFont).width + cellPadding * 2
     }
 
-    private func label(_ s: String, font: NSFont, color: NSColor) -> NSAttributedString {
+    private func size(_ s: String, _ font: NSFont) -> NSSize {
+        label(s, font, .labelColor).size()
+    }
+
+    private func label(_ s: String, _ font: NSFont, _ color: NSColor) -> NSAttributedString {
         NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color])
     }
 }
