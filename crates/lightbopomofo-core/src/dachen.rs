@@ -49,6 +49,17 @@ pub fn symbol(key: char) -> Option<char> {
     Some(s)
 }
 
+/// The key that types `symbol` (the inverse of [`symbol`]); Space for the
+/// first tone ˉ.
+pub fn key(symbol: char) -> Option<char> {
+    if symbol == crate::bopomofo::FIRST_TONE {
+        return Some(' ');
+    }
+    "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik,9ol.0p;/-"
+        .chars()
+        .find(|&k| self::symbol(k) == Some(symbol))
+}
+
 /// Convert a string of 大千 keys to bopomofo. Unknown keys are dropped.
 pub fn convert(keys: &str) -> String {
     keys.chars().filter_map(symbol).collect()
@@ -87,5 +98,14 @@ mod tests {
         seen.sort();
         seen.dedup();
         assert_eq!(seen.len(), 41);
+    }
+
+    #[test]
+    fn key_is_the_inverse() {
+        for k in "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik,9ol.0p;/-".chars() {
+            assert_eq!(key(symbol(k).unwrap()), Some(k));
+        }
+        assert_eq!(key(crate::bopomofo::FIRST_TONE), Some(' '));
+        assert_eq!(key('A'), None);
     }
 }

@@ -109,7 +109,8 @@ pub fn translate(vk: u16, m: Modifiers, composing: bool) -> Option<Key> {
         vk::NUMPAD0..=vk::DIVIDE => Key::Other, // keypad numbers stay numbers
         _ if m.shift => match shifted_punctuation(vk) {
             Some(p) => Key::Punctuation(p.into()),
-            None => Key::Other, // Shift+letter: an uppercase letter
+            None if (0x41..=0x5A).contains(&vk) => Key::Letter(vk as u8 as char), // starts English
+            None => Key::Other,
         },
         _ => match us_char(vk).and_then(dachen::symbol) {
             Some(symbol) => Key::Symbol(symbol),
@@ -120,11 +121,12 @@ pub fn translate(vk: u16, m: Modifiers, composing: bool) -> Option<Key> {
 }
 
 /// Whether the key needs the input method when nothing is being composed:
-/// a bopomofo symbol (a tone alone is not) or full-width punctuation.
+/// a bopomofo symbol (a tone alone is not), full-width punctuation or an
+/// uppercase letter (English).
 pub fn starts_composition(key: &Key) -> bool {
     match key {
         Key::Symbol(s) => !lightbopomofo_core::bopomofo::is_tone(*s),
-        Key::Punctuation(_) => true,
+        Key::Punctuation(_) | Key::Letter(_) => true,
         _ => false,
     }
 }
@@ -213,7 +215,8 @@ mod tests {
             translate(vk::OEM_1, SHIFT, false),
             Some(Key::Punctuation("：".into()))
         );
-        assert_eq!(translate(b'A' as u16, SHIFT, false), Some(Key::Other));
+        assert_eq!(translate(b'A' as u16, SHIFT, false), Some(Key::Letter('A')));
+        assert_eq!(translate(b'2' as u16, SHIFT, false), Some(Key::Other)); // @
     }
 
     #[test]
@@ -251,6 +254,7 @@ mod tests {
         assert!(!starts_composition(&Key::Symbol('ˇ')));
         assert!(!starts_composition(&Key::Symbol(FIRST_TONE))); // Space
         assert!(starts_composition(&Key::Punctuation("，".into())));
+        assert!(starts_composition(&Key::Letter('A')));
         assert!(!starts_composition(&Key::Commit));
         assert!(!starts_composition(&Key::Other));
     }

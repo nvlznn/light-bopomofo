@@ -71,8 +71,12 @@ extension Key {
             if flags.contains(.shift) { return .punctuation(p.shift) }
             if flags.contains(.option) { return .punctuation(p.option) }
             if let plain = p.plain { return .punctuation(plain) }
+        } else if flags.contains(.shift), !flags.contains(.option),
+                  let ch = event.charactersIgnoringModifiers?.uppercased().first, ch.isASCII, ch.isLetter
+        {
+            return .letter(ch)  // Shift+letter: starts English
         } else if !flags.isDisjoint(with: [.shift, .option]) {
-            return .other  // Shift+letter: an uppercase letter; Option+letter: its own
+            return .other  // Option+letter: its own
         }
         if let ch = event.charactersIgnoringModifiers?.lowercased().first,
            let symbol = Engine.bopomofo(forKey: ch)
