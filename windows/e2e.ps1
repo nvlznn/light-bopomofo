@@ -83,8 +83,8 @@ Stop-Process -Id $tutorial.Id -Force -ErrorAction SilentlyContinue
 $settings = "HKCU:\Software\LightBopomofo"
 if (-not (Test-Path $settings)) { $null = New-Item $settings }
 Set-ItemProperty $settings -Name TutorialDone -Value 1 -Type DWord
-# The app offering an update (as if 2.0 were out).
-$env:LIGHTBOPOMOFO_PRETEND_LATEST = "2.0"
+# The app offering an update (as if a much later version were out).
+$env:LIGHTBOPOMOFO_PRETEND_LATEST = "99.0"
 $shown = Start-Process "$dir\LightBopomofo.exe" -PassThru
 Start-Sleep -Seconds 6
 $shown.Refresh()

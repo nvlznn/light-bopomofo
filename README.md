@@ -104,7 +104,7 @@ Release 發布後，`.github/workflows/release.yml` 會建置 Windows 安裝檔�
 
 ## 官網
 
-官網（`website/`）是單一靜態頁，push 到 `main` 時由 Vercel 自動部署。
+官網（`website/`）是靜態頁加上「分享新詞」的 API（`website/api/`，見上方「網站與新詞審核」），push 到 `main` 時由 Vercel 自動部署。
 
 ```sh
 scripts/serve-website.py          # 本機預覽 http://127.0.0.1:8765/，存檔後自動重新整理
