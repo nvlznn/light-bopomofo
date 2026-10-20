@@ -365,7 +365,7 @@ private struct PracticeStep: View {
         ("每個字\n只打第一個注音", "ㄋㄏㄇ", "打 ㄋㄏㄇ，按 Enter 送出「你好嗎」。"),
         ("按 Tab 或 → 選字", "Tab / →", "打 ㄇㄊ，按 Tab 或 → 選「明天」。Shift + Tab 或 ← 往回。"),
         ("找不到？\n按 ] 翻頁", "[ ]", "打 ㄏㄏ，到下一頁找「還好」。[ 回上一頁。"),
-        ("整句不對？\n分段選", "分段", "打 ㄇㄇㄒㄒㄋ，先選「媽媽」，再選「謝謝你」。"),
+        ("整句不對？\n分段選", "分段", "要打「媽媽謝謝你」。打 ㄇㄇㄒㄒㄋ，第一個候選是「密碼謝謝你」，不是要的：先選「媽媽」，再選「謝謝你」。"),
         ("輕注音\n記住你的選擇", "記住了", "再打一次 ㄇㄇㄒㄒㄋ，「媽媽謝謝你」已經排在第一個。"),
     ]
 
@@ -376,13 +376,42 @@ private struct PracticeStep: View {
                 .padding(.top, 34)
             Subtitle(text: copy.subtitle)
                 .padding(.top, 12)
+            Goal(lesson: practice.lesson)
+                .padding(.top, 22)
             Field(practice: practice, revision: revision)
-                .padding(.top, 28)
+                .padding(.top, 10)
             CandidateStrip(practice: practice, revision: revision)
                 .padding(.top, 12)
             KeyGuide(practice: practice, revision: revision)
                 .padding(.top, 22)
         }
+    }
+}
+
+/// What the lesson asks for, shown before anything is typed: the text, in
+/// the pieces it is chosen in when there are several.
+private struct Goal: View {
+    let lesson: Lesson
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("要打出")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.55))
+            Text(lesson.pieces.joined(separator: " ＋ "))
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(Palette.cream)
+            if lesson.pieces.count > 1 {
+                Text("分 \(lesson.pieces.count) 段選")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.white.opacity(0.12)))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
     }
 }
 
@@ -633,14 +662,26 @@ private struct FinalStep: View {
             Title(text: "開始打字吧", chip: "輕")
                 .padding(.top, 34)
             Subtitle(text: needsSetup
-                ? "先到「系統設定 → 鍵盤 → 輸入方式」，在「繁體中文」加入「輕注音」。"
+                ? "輸入法還沒自動加進去，照下面三步自己加一次，之後就能用了。"
                 : "在選單列切換到「輕注音」，任何 App 都能這樣打。")
                 .padding(.top, 12)
-            VStack(spacing: 10) {
-                Option(icon: "A", title: "ABC", selected: false)
-                Option(icon: "輕", title: "輕注音", selected: true)
+            if needsSetup {
+                AddSteps()
+                    .padding(.top, 22)
+            } else {
+                VStack(spacing: 10) {
+                    Option(icon: "A", title: "ABC", selected: false)
+                    Option(icon: "輕", title: "輕注音", selected: true)
+                }
+                .padding(.top, 28)
             }
-            .padding(.top, 28)
+            HStack(spacing: 8) {
+                Image(systemName: needsSetup ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                Text(needsSetup ? "輕注音還沒出現在你的輸入方式裡" : "輕注音已加入你的輸入方式")
+            }
+            .font(.system(size: 13.5, weight: .semibold))
+            .foregroundStyle(needsSetup ? Color.orange : Palette.cream)
+            .padding(.top, 16)
             if needsSetup {
                 Button { model.openInputSourceSettings() } label: {
                     Text("打開輸入方式設定")
@@ -657,6 +698,14 @@ private struct FinalStep: View {
             ShareWordsBox()
                 .padding(.top, 22)
         }
+        // Look again every second until it is there (e.g. after adding it in
+        // System Settings), without waiting for the window to be activated.
+        .task {
+            while needsSetup, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                model.refreshStatus()
+            }
+        }
     }
 
     private var needsSetup: Bool {
@@ -664,6 +713,35 @@ private struct FinalStep: View {
         case .notEnabled, .notInstalled, .failed: return true
         default: return false
         }
+    }
+}
+
+/// How to add 輕注音 to the input sources by hand, for when the system did
+/// not take it in by itself.
+private struct AddSteps: View {
+    private static let steps = [
+        "打開「系統設定」→「鍵盤」，在「文字輸入」按「輸入方式」旁的「編輯…」",
+        "按左下角的「＋」，在左邊選「中文（繁體）」",
+        "選「輕注音」，按「加入」",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(AddSteps.steps.enumerated()), id: \.offset) { index, text in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 13, weight: .bold).monospacedDigit())
+                        .foregroundStyle(.black)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(Palette.cream))
+                    Text(text)
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

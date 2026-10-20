@@ -51,6 +51,11 @@ final class AppModel: ObservableObject {
 
     init() {
         installer = Installer(source: AppModel.bundledInputMethod)
+        // A fresh install always opens on the tutorial, even when an earlier
+        // install (since uninstalled) had finished or skipped it.
+        if installer.installedVersion == nil {
+            UserDefaults.standard.set(false, forKey: OnboardingView.doneKey)
+        }
     }
 
     var bundledVersion: String { installer.sourceVersion }
@@ -63,6 +68,7 @@ final class AppModel: ObservableObject {
             install()
         } else {
             refreshStatus()
+            ensureEnabled()  // e.g. removed from the input sources since
         }
         reloadHistory()
         Updater.scheduleChecks()
@@ -126,8 +132,21 @@ final class AppModel: ObservableObject {
         do {
             try installer.install()
             refreshStatus()
+            ensureEnabled()
         } catch {
             status = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Whatever the system said at install, make sure 輕注音 ends up among the
+    /// user's input sources: look again, registering and enabling it each
+    /// time, for a few seconds; the status follows. When it still does not
+    /// appear, the status says so and the tutorial and 一般 show how to add it.
+    func ensureEnabled() {
+        guard !installer.isEnabled else { return }
+        Task {
+            await installer.ensureEnabled()
+            refreshStatus()
         }
     }
 

@@ -100,6 +100,21 @@ struct Installer {
         }
     }
 
+    /// Make the system list the input method as selectable and enabled,
+    /// registering again (and enabling) until it does or `attempts` run out,
+    /// since the system can take a moment to notice a bundle just copied in.
+    /// Returns whether it is in the user's input sources now.
+    @discardableResult
+    func ensureEnabled(attempts: Int = 8, wait: TimeInterval = 0.4) async -> Bool {
+        guard touchesSystem else { return true }
+        for attempt in 0..<attempts {
+            if isEnabled { return true }
+            if attempt > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1e9)) }
+            try? register()
+        }
+        return isEnabled
+    }
+
     // MARK: - System
 
     private func register() throws {
