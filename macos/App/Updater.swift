@@ -4,10 +4,13 @@ import ServiceManagement
 import UserNotifications
 
 /// Updating in place: a background item runs this app with --check-update
-/// every few hours; when GitHub has a newer release it posts a notification.
-/// Choosing it (or 更新 in the app) downloads the dmg, checks that it is
-/// signed by us, replaces this app and reopens it; the new app then updates
-/// the input method as on any first launch.
+/// every few hours; when GitHub has a newer release it downloads the dmg,
+/// checks that it is signed by us and replaces this app, then puts the new
+/// input method in place once the user stops typing, and says so. When that
+/// cannot happen (the window is open, the download failed) it posts a
+/// notification instead and leaves the version for the input method's menu;
+/// choosing either (or 更新 in the app) does the same and reopens the app,
+/// which updates the input method as on any first launch.
 enum Updater {
     static let teamID = "6KB6SVY565"
     static let category = "update"
@@ -17,7 +20,13 @@ enum Updater {
     /// …and reminds of an update it already announced this often.
     private static let remindEvery: TimeInterval = 7 * 24 * 3600
 
-    /// Whether to check in the background (on unless turned off).
+    /// How long the user must have left the keyboard and mouse alone before
+    /// the input method is restarted with the new version…
+    private static let quietFor: TimeInterval = 30
+    /// …and how long to wait for that before leaving it to the next check.
+    private static let waitForQuiet: TimeInterval = 15 * 60
+
+    /// Whether to update in the background (on unless turned off).
     static var autoCheck: Bool {
         get { UserDefaults.standard.object(forKey: "CheckForUpdates") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "CheckForUpdates") }
@@ -55,10 +64,20 @@ enum Updater {
         try? await center.add(UNNotificationRequest(identifier: category, content: content, trigger: nil))
     }
 
+    static func notifyInstalled(_ version: String) async {
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [category])
+        let content = UNMutableNotificationContent()
+        content.title = "輕注音已更新到 \(version)"
+        content.body = "新版本已經裝好，可以繼續打字。"
+        try? await center.add(UNNotificationRequest(identifier: "updated", content: content, trigger: nil))
+    }
+
     /// `--check-update` (the background item): 0 nothing to do, 10 an update
-    /// is available, 1 the check failed. `force` (`--now`) skips the setting
-    /// and the once-in-a-while limits.
+    /// is waiting for the user, 20 updated, 1 the check failed. `force`
+    /// (`--now`) skips the setting and the once-in-a-while limits.
     static func checkInBackground(force: Bool) async -> Int32 {
+        await updateInputMethodWhenQuiet()  // left waiting by an earlier update
         let defaults = UserDefaults.standard
         let now = Date().timeIntervalSince1970
         if !force, !autoCheck || now < defaults.double(forKey: "LastUpdateCheck") + checkEvery {
@@ -66,7 +85,22 @@ enum Updater {
         }
         defaults.set(now, forKey: "LastUpdateCheck")
         do {
-            guard let version = try await UpdateCheck.available() else { return 0 }
+            guard let version = try await UpdateCheck.available() else {
+                PendingUpdate.record(nil)
+                return 0
+            }
+            if !windowIsOpen {
+                do {
+                    try await install(version)
+                    PendingUpdate.record(nil)
+                    await updateInputMethodWhenQuiet()
+                    await notifyInstalled(version)
+                    return 20
+                } catch {
+                    NSLog("輕注音: background update to \(version): \(error)")
+                }
+            }
+            PendingUpdate.record(version)
             let announced = defaults.string(forKey: "NotifiedVersion") == version
                 && now < defaults.double(forKey: "NotifiedAt") + remindEvery
             if force || !announced {
@@ -77,6 +111,41 @@ enum Updater {
             return 10
         } catch {
             return 1
+        }
+    }
+
+    /// The app (with its window) is running: leave the update to it.
+    private static var windowIsOpen: Bool {
+        let me = ProcessInfo.processInfo.processIdentifier
+        return NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .contains { $0.processIdentifier != me }
+    }
+
+    /// Seconds since the last key press, click or mouse move anywhere.
+    private static var idleTime: TimeInterval {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    }
+
+    /// When this app carries a newer input method than the one installed
+    /// (it was updated in the background), put it in place once the user has
+    /// stopped typing for a while, since that restarts the input method.
+    static func updateInputMethodWhenQuiet() async {
+        let installer = Installer(source: AppModel.bundledInputMethod)
+        guard let installed = installer.installedVersion,
+              UpdateCheck.isNewer(installer.sourceVersion, than: installed)
+        else { return }
+        let deadline = Date().addingTimeInterval(waitForQuiet)
+        while idleTime < quietFor {
+            guard Date() < deadline else { return }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+        // On the main thread, which can wait for the old input method to quit.
+        await MainActor.run {
+            do {
+                try installer.install()
+            } catch {
+                NSLog("輕注音: updating the input method: \(error)")
+            }
         }
     }
 

@@ -14,16 +14,13 @@ struct GeneralView: View {
 
             GroupBox("打法") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("每個字只打第一個注音，例如 ㄋㄏㄇ → 你好嗎、ㄍㄗㄈㄈ → 工作方法。也可以打完整注音或加上聲調來縮小範圍。")
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("每個字只打第一個注音：ㄋㄏㄇ → 你好嗎")
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                        KeyRow(keys: "Enter", action: "送出選中的候選")
-                        KeyRow(keys: "← →／Tab", action: "選擇候選；可以只選前段，剩下的接著選")
-                        KeyRow(keys: "Shift + 1–9", action: "直接送出這一頁的第幾個候選")
-                        KeyRow(keys: "[ ]／PageUp PageDown", action: "上一頁／下一頁候選")
-                        KeyRow(keys: "空白 3 4 6 7", action: "聲調 ˉ ˇ ˋ ˊ ˙（可省略）")
-                        KeyRow(keys: "Backspace／Esc", action: "刪除一個注音／清空")
-                        KeyRow(keys: "Shift + , . / 1 ;", action: "，。？！：（組字中 Shift + 1 是選字）")
+                        KeyRow(keys: "Enter", action: "送出")
+                        KeyRow(keys: "← →", action: "選字")
+                        KeyRow(keys: "Shift + 1–9", action: "直接選第幾個")
+                        KeyRow(keys: "[ ]", action: "換頁")
+                        KeyRow(keys: "Esc", action: "清空")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -36,8 +33,8 @@ struct GeneralView: View {
                 Text("輸入法不連網，選字紀錄只存在這台 Mac。")
                     .foregroundStyle(.secondary)
                 Spacer()
-                Toggle("自動檢查更新", isOn: $model.autoCheck)
-                    .help("每天向 GitHub 查一次有沒有新版本，不傳送任何資料。")
+                Toggle("自動更新", isOn: $model.autoCheck)
+                    .help("有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
                 Button("打字教學") { tutorialDone = false }
                     .buttonStyle(.link)
                 Link("官網", destination: URL(string: "https://lightbopomofo.noky.dev")!)

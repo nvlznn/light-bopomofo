@@ -46,6 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    /// lightbopomofo:update, from the input method's menu: update right away.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        if urls.contains(PendingUpdate.url) { AppModel.requestUpdate() }
+    }
+
     /// The update notification was chosen: update right away.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,

@@ -330,5 +330,18 @@ do {
     check(!UpdateCheck.isNewer("0.1.0", than: "1.0"), "0.1.0 < 1.0")
 }
 
+// The version left for the input method's menu (PendingUpdate).
+do {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lb-pending-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    check(PendingUpdate.version(newerThan: "2.0", in: dir) == nil, "nothing recorded")
+    PendingUpdate.record("3.0", in: dir)
+    check(PendingUpdate.version(newerThan: "2.0", in: dir) == "3.0", "3.0 offered to 2.0")
+    check(PendingUpdate.version(newerThan: "3.0", in: dir) == nil, "not offered once updated")
+    check(PendingUpdate.version(newerThan: "10.0", in: dir) == nil, "never an older version")
+    PendingUpdate.record(nil, in: dir)
+    check(PendingUpdate.version(newerThan: "2.0", in: dir) == nil, "forgotten")
+}
+
 print(failures == 0 ? "OK (\(String(format: "%.2f", Date().timeIntervalSince(started)))s)" : "\(failures) failure(s)")
 exit(failures == 0 ? 0 : 1)

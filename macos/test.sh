@@ -9,6 +9,7 @@ build_rust
 swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_ffi \
     "$ROOT/macos/Shared/Engine.swift" "$ROOT/macos/Shared/Installer.swift" \
     "$ROOT/macos/Shared/Composer.swift" "$ROOT/macos/Shared/KeyEvent.swift" \
+    "$ROOT/macos/Shared/PendingUpdate.swift" \
     "$ROOT/macos/App/UpdateCheck.swift" \
     "$ROOT/macos/App/Lesson.swift" \
     "$ROOT/macos/Tests/main.swift" -o "$OUT"
