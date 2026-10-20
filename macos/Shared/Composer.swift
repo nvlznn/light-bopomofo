@@ -8,7 +8,7 @@ enum Key: Equatable {
     case escape
     case previous  // ←, Shift+Tab
     case next  // →, Tab
-    case up  // ↑: previous, or a row up in the grid (collapsing it from the top row)
+    case up  // ↑: previous, or a row up in the grid
     case down  // ↓: expand the candidates into a grid, then a row down
     case select(Int)  // Shift+1–9 while composing: commit that candidate of the current page
     case pagePrevious  // [, PageUp
@@ -104,9 +104,7 @@ final class Composer {
             guard !isEmpty else { return KeyResult(handled: false) }
             if !expanded {
                 move(to: selected - 1)
-            } else if selected < Composer.gridColumns {
-                collapse()
-            } else {
+            } else if selected >= Composer.gridColumns {
                 move(to: selected - Composer.gridColumns)
             }
             return KeyResult(handled: true)

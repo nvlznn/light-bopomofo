@@ -35,6 +35,7 @@ final class CandidatePanel {
             view.selected = (row: (selected - start) / columns, column: (selected - start) % columns)
             view.pageLabel = nil
             view.more = end < candidates.count
+            view.firstRow = top
         } else {
             let page = selected / CandidatePanel.perPage
             let start = page * CandidatePanel.perPage
@@ -84,6 +85,9 @@ private final class CandidateView: NSView {
     var isGrid = false
     /// Strip: more candidates than shown (↓ expands); grid: more rows below.
     var more = false
+    /// Grid: the number of its first visible row (0-based), for the row
+    /// numbers down the left.
+    var firstRow = 0
 
     private let textFont = NSFont.systemFont(ofSize: 18)
     private let indexFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
@@ -94,8 +98,14 @@ private final class CandidateView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Grid: the column of row numbers, apart from the cells' own numbers.
+    private var gutter: CGFloat {
+        guard isGrid else { return 0 }
+        return size("\(firstRow + rows.count)", indexFont).width + cellPadding * 2 + 4
+    }
+
     override var fittingSize: NSSize {
-        var width = padding * 2 + columnWidths.reduce(0, +)
+        var width = padding * 2 + gutter + columnWidths.reduce(0, +)
         if !isGrid {
             if let pageLabel { width += size(pageLabel, indexFont).width + cellPadding * 2 }
             if more { width += size(hint, indexFont).width + cellPadding * 2 }
@@ -120,13 +130,25 @@ private final class CandidateView: NSView {
         background.stroke()
 
         let widths = columnWidths
+        let gutter = self.gutter
+        if isGrid {
+            NSColor.separatorColor.setFill()
+            NSRect(x: padding + gutter - 4, y: 6, width: 0.5, height: rowHeight * CGFloat(rows.count) - 12).fill()
+        }
         for (r, row) in rows.enumerated() {
             let y = CGFloat(r) * rowHeight
             if r > 0 {
                 NSColor.separatorColor.setFill()
-                NSRect(x: padding, y: y, width: bounds.width - padding * 2, height: 0.5).fill()
+                NSRect(x: padding + gutter, y: y, width: bounds.width - padding * 2 - gutter, height: 0.5).fill()
             }
-            var x = padding
+            if isGrid {
+                let color: NSColor = r == selected.row ? .labelColor : .tertiaryLabelColor
+                let number = label("\(firstRow + r + 1)", indexFont, color)
+                number.draw(at: NSPoint(
+                    x: padding + (gutter - 4 - number.size().width) / 2,
+                    y: y + (rowHeight - number.size().height) / 2))
+            }
+            var x = padding + gutter
             for (c, text) in row.enumerated() {
                 let w = widths[c]
                 let isSelected = (r, c) == selected
