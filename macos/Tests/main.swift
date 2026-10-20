@@ -187,6 +187,35 @@ do {
     check(!c.candidates.contains { $0.text == "cc" }, "no cc for ㄏㄏ")
 }
 
+// Once moving among the candidates, the number keys choose and Space commits.
+do {
+    let c = makeComposer()
+    type(c, "ㄍㄗㄈㄈ")
+    _ = c.handle(.symbol("ㄓ"))
+    check(c.composingText == "ㄍㄗㄈㄈㄓ", "not moved yet: 5 is ㄓ")
+    _ = c.handle(.backspace)
+    _ = c.handle(.next)
+    check(c.choosing, "choosing after Tab")
+    let third = c.candidates[2].text
+    check(c.handle(.symbol("ˇ")) == KeyResult(handled: true, commit: third), "3 chooses the third")
+    c.reset()
+    type(c, "ㄋㄏㄇ")
+    _ = c.handle(.next)
+    let second = c.candidates[1].text
+    check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: true, commit: second), "space commits")
+    c.reset()
+    type(c, "ㄋㄏ")
+    _ = c.handle(.next)
+    _ = c.handle(.symbol("ㄇ"))
+    check(!c.choosing && c.composingText == "ㄋㄏㄇ", "other keys type again")
+    c.reset()
+    // Readings around English: 你好app is one choice on the first page.
+    type(c, "ㄋㄏ")
+    for s in "ㄇㄣㄣ" { _ = c.handle(.symbol(s)) }
+    let at = c.candidates.firstIndex { $0.text == "你好app" }
+    check(at.map { $0 < Composer.pageSize } ?? false, "你好app on page 1: \(c.candidates.prefix(9).map(\.text))")
+}
+
 // Key events → keys: Shift+Option types what Shift does, but ” 《 》 on ' , .
 do {
     func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ chars: String) -> Key {

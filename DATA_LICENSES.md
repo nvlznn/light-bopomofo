@@ -42,4 +42,4 @@
 ## 不隨安裝檔散布的資料
 - repo 不包含 `tsi.csv`。建置時由 `scripts/fetch-lexicon.sh` 從上述固定的 commit 下載。
 - `eval/tatoeba.tsv`：評估用的日常短句，取自 Tatoeba（https://tatoeba.org，CC BY 2.0 FR），由 `scripts/gen-eval.py` 產生，只用於 `lb-cli --eval`。
-- `eval/mixed.tsv`：`eval/tatoeba.tsv` 的短句前後接上 `english.csv` 的英文詞（同樣是 CC BY 2.0 FR），由 `scripts/gen-mixed-eval.py` 產生，只用於 `lb-cli --eval`。
+- `eval/mixed.tsv`、`eval/mixed-middle.tsv`：`eval/tatoeba.tsv` 的短句前後或中間接上 `english.csv` 的英文詞（同樣是 CC BY 2.0 FR），由 `scripts/gen-mixed-eval.py` 產生，只用於 `lb-cli --eval`。

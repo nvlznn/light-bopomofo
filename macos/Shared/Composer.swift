@@ -55,6 +55,10 @@ final class Composer {
     private var englishParts: [String] = []
     /// The candidate that types the keys themselves (app, ok), if offered.
     private var keysAt: Int?
+    /// Moved among the candidates (Tab, arrows, pages) since the composition
+    /// last changed: the number keys choose on the page shown and Space
+    /// commits, as in a candidate window (唯音); other keys type as usual.
+    private(set) var choosing = false
 
     /// Lowercase starts of names typed with a capital inside (iPhone, macOS):
     /// the keys typed right before the capital that join the English. Only
@@ -70,6 +74,15 @@ final class Composer {
     private var length: Int { symbols.count + (english?.count ?? 0) }
 
     func handle(_ key: Key) -> KeyResult {
+        var key = key
+        // 1–9 are bopomofo and tones on 大千; while choosing, they choose.
+        if choosing, case .symbol(let s) = key {
+            if s == Composer.firstTone {
+                key = .commit
+            } else if let d = Engine.key(forBopomofo: s)?.wholeNumberValue, (1...9).contains(d) {
+                key = .select(d)
+            }
+        }
         if let tone = loneTone {
             switch key {
             case .letter(let c):
@@ -132,10 +145,12 @@ final class Composer {
             return KeyResult(handled: true)
         case .previous:
             guard !isEmpty else { return KeyResult(handled: false) }
+            choosing = true
             selected = max(0, selected - 1)
             return KeyResult(handled: true)
         case .next:
             guard !isEmpty else { return KeyResult(handled: false) }
+            choosing = true
             selected = min(candidates.count - 1, selected + 1)
             return KeyResult(handled: true)
         case .select(let n):
@@ -148,6 +163,7 @@ final class Composer {
             return KeyResult(handled: true, commit: commitSelected())
         case .pagePrevious, .pageNext:
             guard !isEmpty else { return KeyResult(handled: false) }
+            choosing = true
             let page = selected / Composer.pageSize
             let last = max(candidates.count - 1, 0) / Composer.pageSize
             selected = (key == .pageNext ? min(page + 1, last) : max(page - 1, 0)) * Composer.pageSize
@@ -247,6 +263,7 @@ final class Composer {
 
     private func refresh() {
         selected = 0
+        choosing = false
         keysAt = nil
         englishParts = []
         if let tone = loneTone {

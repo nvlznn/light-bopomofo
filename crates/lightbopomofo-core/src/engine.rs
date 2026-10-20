@@ -154,6 +154,11 @@ pub const ENGLISH_SHARE: f64 = -3.0;
 pub const ENGLISH_LEARNED: f64 = -4.0;
 /// Shortest English word looked up.
 pub const ENGLISH_MIN_LEN: usize = 2;
+/// A whole conversion with English in it: how many other readings of the
+/// Chinese before the first English word, and after the last, to offer as
+/// whole conversions right after it (see [`Engine::query`]).
+pub const AROUND_ENGLISH_BEFORE: usize = 4;
+pub const AROUND_ENGLISH_AFTER: usize = 2;
 
 /// Whether the keys of English `text` stand out from 簡拼, which types the
 /// first symbol of each character: mostly initials, and the medials ㄧㄨㄩ
@@ -594,6 +599,8 @@ impl Engine {
         let rest = rest.into_iter().map(|(c, _)| c);
         candidates.extend(whole.into_iter().chain(front).chain(chars).chain(rest));
 
+        self.offer_around_english(input, &mut candidates);
+
         // A whole input committed before comes back first.
         let whole: String = input.iter().collect();
         if let Some(text) = self
@@ -633,6 +640,82 @@ impl Engine {
             },
         );
         candidates
+    }
+
+    /// English cuts a whole conversion into pieces converted apart, and a
+    /// short piece of 簡拼 is ambiguous on its own (ㄋㄏ is 女孩 as often as
+    /// 你好). So right after the first whole conversion, offer it with the
+    /// other readings of the Chinese before its first English word, and
+    /// after its last one: 你好app beside 女孩app, one choice instead of
+    /// choosing the pieces one by one.
+    fn offer_around_english(&self, input: &[char], candidates: &mut Vec<Candidate>) {
+        let n = input.len();
+        let Some(first) = candidates.first().cloned() else {
+            return;
+        };
+        // Where each word starts; give up if symbols no word explains are
+        // mixed in.
+        let mut starts = Vec::with_capacity(first.words.len());
+        let mut at = 0;
+        for word in &first.words {
+            starts.push(at);
+            at += word.typed.chars().count();
+        }
+        if at != n {
+            return;
+        }
+        let english: Vec<usize> = (0..first.words.len())
+            .filter(|&i| is_english(&first.words[i].text))
+            .collect();
+        let (Some(&head), Some(&tail)) = (english.first(), english.last()) else {
+            return;
+        };
+        let text_of = |words: &[Word]| words.iter().map(|w| w.text.as_str()).collect::<String>();
+        let mut offered: Vec<Candidate> = Vec::new();
+        // The Chinese before the first English word.
+        let a = starts[head];
+        if a > 0 {
+            let rest = &first.words[head..];
+            for alt in self.readings(&input[..a], &first.words[..head], AROUND_ENGLISH_BEFORE) {
+                offered.push(Candidate {
+                    text: alt.text.clone() + &text_of(rest),
+                    consumed: n,
+                    score: first.score,
+                    words: alt.words.into_iter().chain(rest.iter().cloned()).collect(),
+                });
+            }
+        }
+        // The Chinese after the last English word.
+        let b = starts[tail] + first.words[tail].typed.chars().count();
+        if b < n {
+            let before = &first.words[..=tail];
+            for alt in self.readings(&input[b..], &first.words[tail + 1..], AROUND_ENGLISH_AFTER) {
+                offered.push(Candidate {
+                    text: text_of(before) + &alt.text,
+                    consumed: n,
+                    score: first.score,
+                    words: before.iter().cloned().chain(alt.words).collect(),
+                });
+            }
+        }
+        offered.retain(|c| c.text != first.text);
+        let texts: HashSet<&str> = offered.iter().map(|c| c.text.as_str()).collect();
+        candidates.retain(|c| !texts.contains(c.text.as_str()));
+        for (i, c) in offered.into_iter().enumerate() {
+            candidates.insert(1 + i, c);
+        }
+    }
+
+    /// Up to `count` whole readings of `input` other than `current` (the
+    /// words it is read as now), best first.
+    fn readings(&self, input: &[char], current: &[Word], count: usize) -> Vec<Candidate> {
+        let current: String = current.iter().map(|w| w.text.as_str()).collect();
+        let raw: String = input.iter().collect();
+        self.query(input)
+            .into_iter()
+            .filter(|c| c.consumed == input.len() && c.text != current && c.text != raw)
+            .take(count)
+            .collect()
     }
 
     /// Record that the user committed `text` for the start of `input`: each

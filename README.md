@@ -17,6 +17,7 @@
 - **常見的英文詞直接打**：`google`、`iphone`、`email` 照英文的鍵打，就會出現 Google、iPhone、email，也能接在句子裡（ㄋㄏ + `app` → 你好app）。英文的鍵常落在韻母上（app 是 ㄇㄣㄣ），簡拼幾乎都是聲母，所以兩者很少互相搶。詞表在 `crates/lightbopomofo-core/english.csv`。
 - **大寫字母開始英文**：Shift+字母開始一段英文，直到空白、Enter 或標點：`iPhone`、`API`、`5G`、`Node.js`。英文前面的注音照樣轉換（ㄋㄏ + `API` → 你好API）；英文從哪裡開始猜錯時，按 Tab 換。
 - **其他小寫英文**：打的鍵本身是第一頁最後一個候選。
+- **一次選好**：英文把句子切開時，第一頁會有換掉中文那段的整句（ㄋㄏ + `app` 有 女孩app，也有 你好app），選一次就好，選過的每一段都會記住。
 - **會記住**：用過的英文下次直接用小寫打就會出現（打過一次 `Figma`，之後 `figma` 就是 Figma）。英文只存在本機，不會被「分享新詞」傳出去。
 
 和簡拼分不開的英文（yes 是 ㄗㄍㄋ、bug 是 ㄖㄧㄕ）不會自動出現，用 Shift 打過一次之後，單獨打才會出現。
@@ -39,6 +40,7 @@ Windows 有新版本時跳出通知，按一下就更新。
 |---|---|
 | ← → Tab | 選候選；可以只選前段，剩下的接著選 |
 | Shift + 1–9 | 直接送出這一頁的第幾個 |
+| 按過 Tab／方向鍵／換頁之後的 1–9 | 直接送出這一頁的第幾個（像唯音的選字窗）；空白鍵送出選中的；打其他注音就回到打字 |
 | [ ] PageUp PageDown | 換頁 |
 | Shift + 字母 | 開始一段英文，空白、Enter 或標點結束 |
 
@@ -51,7 +53,7 @@ cargo run --release -p lightbopomofo-cli -- ㄋㄏㄇ ㄍㄗㄈㄈ
 cargo run --release -p lightbopomofo-cli -- --dachen sca   # 用大千鍵位輸入
 cargo run --release -p lightbopomofo-cli                   # 互動模式；以 : 開頭的行是大千鍵位
 cargo run --release -p lightbopomofo-cli -- --eval eval/tatoeba.tsv   # 正確率（--no-pairs 比較不用詞組）
-scripts/gen-mixed-eval.py                                              # 產生 eval/mixed.tsv：句子前後接英文詞
+scripts/gen-mixed-eval.py                                              # 產生 eval/mixed.tsv（句子前後接英文詞）和 eval/mixed-middle.tsv（英文在句子中間）
 cargo run --release -p lightbopomofo-cli -- --eval eval/mixed.tsv      # 中英混打正確率
 ```
 

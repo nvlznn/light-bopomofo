@@ -5,6 +5,10 @@ lowercase as its 大千 keys (app is ㄇㄣㄣ). Same columns as tatoeba.tsv
 (text, full bopomofo, first symbols), so `lb-cli --eval eval/mixed.tsv`
 measures how often the English comes out right inside Chinese.
 
+Also eval/mixed-middle.tsv: the English inside the phrase, between two of
+its characters. Only typed by first symbols (one per character, so the
+phrase can be cut anywhere); its "full" column is the same typing.
+
     scripts/gen-mixed-eval.py [COUNT]   (default 1000; fixed seed)
 """
 import random
@@ -44,6 +48,16 @@ def main():
             out.append(f"{text}{word}\t{full}{keys}\t{first}{keys}")
     (ROOT / "eval/mixed.tsv").write_text("\n".join(out) + "\n")
     print(f"eval/mixed.tsv: {len(out)} phrases")
+
+    middle = []
+    long_enough = [p for p in phrases if len(p[0]) >= 3 and len(p[0]) == len(p[2])]
+    for text, _, first in rng.sample(long_enough, min(count, len(long_enough))):
+        word = rng.choices(texts, weights)[0]
+        cut = rng.randrange(1, len(text))
+        typed_first = first[:cut] + typed(word) + first[cut:]
+        middle.append(f"{text[:cut]}{word}{text[cut:]}\t{typed_first}\t{typed_first}")
+    (ROOT / "eval/mixed-middle.tsv").write_text("\n".join(middle) + "\n")
+    print(f"eval/mixed-middle.tsv: {len(middle)} phrases")
 
 
 if __name__ == "__main__":

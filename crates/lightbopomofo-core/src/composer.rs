@@ -81,6 +81,10 @@ pub struct Composer {
     english_parts: Vec<String>,
     /// The candidate that types the keys themselves (app, ok), if offered.
     keys_at: Option<usize>,
+    /// Moved among the candidates (Tab, arrows, pages) since the composition
+    /// last changed: the number keys choose on the page shown and Space
+    /// commits, as in a candidate window (唯音); other keys type as usual.
+    choosing: bool,
 }
 
 /// Lowercase starts of names typed with a capital inside (iPhone, macOS):
@@ -192,7 +196,21 @@ impl Composer {
         self.selected
     }
 
+    /// Whether the number keys choose (see `choosing`).
+    pub fn is_choosing(&self) -> bool {
+        self.choosing
+    }
+
     pub fn handle(&mut self, engine: &mut Engine, key: Key) -> KeyResult {
+        let key = match key {
+            // 1–9 are bopomofo and tones on 大千; while choosing, they choose.
+            Key::Symbol(s) if self.choosing => match dachen::key(s) {
+                Some(' ') => Key::Commit,
+                Some(d @ '1'..='9') => Key::Select(d as usize - '0' as usize),
+                _ => Key::Symbol(s),
+            },
+            key => key,
+        };
         if self.english.is_some() {
             if let Some(result) = self.handle_english(engine, &key) {
                 return result;
@@ -269,6 +287,7 @@ impl Composer {
                 if self.is_empty() {
                     return KeyResult::pass();
                 }
+                self.choosing = true;
                 self.selected = self.selected.saturating_sub(1);
                 KeyResult::handled(String::new())
             }
@@ -276,6 +295,7 @@ impl Composer {
                 if self.is_empty() {
                     return KeyResult::pass();
                 }
+                self.choosing = true;
                 self.selected = (self.selected + 1).min(self.candidates.len().saturating_sub(1));
                 KeyResult::handled(String::new())
             }
@@ -295,6 +315,7 @@ impl Composer {
                 if self.is_empty() {
                     return KeyResult::pass();
                 }
+                self.choosing = true;
                 let page = self.selected / PAGE_SIZE;
                 let last = self.candidates.len().saturating_sub(1) / PAGE_SIZE;
                 let page = if key == Key::PageNext {
@@ -342,6 +363,7 @@ impl Composer {
         self.english_parts.clear();
         self.keys_at = None;
         self.selected = 0;
+        self.choosing = false;
         self.reset_session();
     }
 
@@ -419,6 +441,7 @@ impl Composer {
 
     fn refresh(&mut self, engine: &mut Engine) {
         self.selected = 0;
+        self.choosing = false;
         self.keys_at = None;
         self.english_parts.clear();
         self.candidates = if let Some(english) = self.english.clone() {

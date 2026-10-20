@@ -500,3 +500,51 @@ fn learned_english_that_looks_like_jianpin_comes_only_alone() {
     typing(&mut c, &mut e, "ㄒㄗㄍㄋㄌ");
     assert_eq!(first(&c), before, "not inside a sentence");
 }
+
+#[test]
+fn number_keys_choose_once_moving_among_candidates() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    // Not moved yet: 5 is ㄓ, typed as usual.
+    typing(&mut c, &mut e, "ㄍㄗㄈㄈ");
+    c.handle(&mut e, Key::Symbol('ㄓ'));
+    assert_eq!(c.composing_text(), "ㄍㄗㄈㄈㄓ");
+    c.handle(&mut e, Key::Backspace);
+    // After Tab: 3 (ˇ on 大千) chooses the third of the page.
+    c.handle(&mut e, Key::Next);
+    assert!(c.is_choosing());
+    let third = c.candidates()[2].text.clone();
+    assert_eq!(c.handle(&mut e, Key::Symbol('ˇ')), handled(&third));
+    // Space commits the one highlighted.
+    c.reset();
+    typing(&mut c, &mut e, "ㄋㄏㄇ");
+    c.handle(&mut e, Key::Next);
+    let second = c.candidates()[1].text.clone();
+    assert_eq!(c.handle(&mut e, Key::Symbol(FIRST_TONE)), handled(&second));
+    c.reset();
+    // Any other key goes back to typing.
+    typing(&mut c, &mut e, "ㄋㄏ");
+    c.handle(&mut e, Key::Next);
+    c.handle(&mut e, Key::Symbol('ㄇ'));
+    assert!(!c.is_choosing());
+    assert_eq!(c.composing_text(), "ㄋㄏㄇ");
+}
+
+#[test]
+fn readings_around_english_are_one_choice_on_the_first_page() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "app");
+    let at = c.candidates().iter().position(|x| x.text == "你好app");
+    assert!(
+        at.is_some_and(|i| i < PAGE_SIZE),
+        "{:?}",
+        c.candidates().iter().take(PAGE_SIZE).map(|x| &x.text).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        c.handle(&mut e, Key::Select(at.unwrap() + 1)),
+        handled("你好app")
+    );
+    // Learned piece by piece: ㄋㄏ is 你好 from now on, also alone.
+    typing(&mut c, &mut e, "ㄋㄏ");
+    assert_eq!(first(&c), "你好");
+}
