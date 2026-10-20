@@ -23,13 +23,13 @@
   color-scheme: light;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 button, input { font: inherit; color: inherit; }
-.wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
-.btn { border: 0; border-radius: 10px; padding: 7px 14px; background: var(--accent-soft); color: var(--accent); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 16px 16px 32px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+h1 { font-size: 18px; margin: 0; letter-spacing: .01em; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.btn { border: 0; border-radius: 6px; padding: 5px 9px; background: var(--accent-soft); color: var(--accent); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn:hover { filter: brightness(.97); }
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.ok { background: rgba(23, 128, 61, .1); color: var(--ok); }
@@ -45,34 +45,41 @@ h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
 #login .btn { width: 100%; margin-top: 20px; padding: 10px; }
 .error { color: var(--no); font-size: 14px; min-height: 1.5em; margin: 10px 0 0; }
 
-.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.tabs button { border: 0; border-radius: 999px; padding: 6px 14px; background: transparent; color: var(--ink2); cursor: pointer; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.tabs button { border: 0; border-radius: 999px; padding: 5px 10px; background: transparent; color: var(--ink2); cursor: pointer; }
 .tabs button[aria-pressed="true"] { background: var(--ink); color: #fff; }
 .tabs .n { opacity: .7; margin-left: 4px; font-variant-numeric: tabular-nums; }
 
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { font-size: 13px; color: var(--ink3); font-weight: 500; }
 tr:last-child td { border-bottom: 0; }
-td.word { font-size: 20px; font-weight: 600; }
+td.word { font-size: 16px; font-weight: 600; }
 td.typed { color: var(--ink2); font-size: 14px; }
 td.num { font-variant-numeric: tabular-nums; color: var(--ink2); }
-td.act { width: 220px; text-align: right; white-space: nowrap; }
+td.act { width: 155px; text-align: right; white-space: nowrap; }
 td.act .btn + .btn { margin-left: 6px; }
-.empty { padding: 40px; text-align: center; color: var(--ink3); }
+.empty { padding: 20px; text-align: center; color: var(--ink3); }
 tr[data-selected="true"] { background: var(--accent-soft); }
 tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.save-state { display: block; width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.5em; font-size: 12px; color: var(--ink3); }
+.save-state { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink3); }
+.save-state:empty { display: none; }
+[hidden] { display: none !important; }
+#review-message:empty { display: none; }
+#review-message { margin: 4px 0 8px; }
+#shortcuts { margin: 0; font-size: 12px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.toolbar .tabs, .toolbar #filters { margin: 0; }
 .save-state.failed { color: var(--no); }
-.review-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.review-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #filters { margin-bottom: 16px; }
-#min-uses { width: 90px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+#min-uses { width: 65px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 kbd { font: inherit; font-weight: 600; }
 .muted { color: var(--ink3); font-size: 14px; }
 
 @media (max-width: 640px) {
   thead { display: none; }
-  tr { display: grid; grid-template-columns: 1fr auto; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  tr { display: grid; grid-template-columns: 1fr auto; padding: 6px 2px; border-bottom: 1px solid var(--line); }
   tr:last-child { border-bottom: 0; }
   td { border: 0; padding: 4px 10px; }
   td.word { grid-column: 1; }
@@ -98,27 +105,28 @@ kbd { font: inherit; font-weight: 600; }
       <h1>新詞審核</h1>
       <button class="btn plain" id="logout" type="button">登出</button>
     </header>
-    <p class="muted">顯示使用者輸入過、詞庫沒有的詞。次數會跨所有裝置累計。加入的詞會收進下一版詞庫。</p>
+    <div class="toolbar">
     <form id="filters" class="review-tools">
-      <label for="min-uses">最低累計輸入次數</label>
-      <input id="min-uses" type="number" min="1" max="2147483647" step="1" value="2" required aria-describedby="filter-help">
+      <label for="min-uses">至少幾次</label>
+      <input id="min-uses" type="number" min="1" max="2147483647" step="1" value="2" required title="跨裝置累計；設為 1 顯示全部">
       <button id="apply-filter" class="btn" type="submit">套用</button>
-      <span class="muted" id="filter-help">設為 1 可顯示全部；設定會記在此瀏覽器。</span>
+
     </form>
     <div class="tabs" role="group" aria-label="狀態">
       <button type="button" data-status="pending" aria-pressed="true">待審<span class="n"></span></button>
       <button type="button" data-status="approved" aria-pressed="false">已加入<span class="n"></span></button>
       <button type="button" data-status="rejected" aria-pressed="false">不要<span class="n"></span></button>
     </div>
-    <div class="review-tools">
-      <p class="muted" id="shortcuts">↑ / ↓ 選詞 · <kbd>A</kbd> 加入 · <kbd>D</kbd> 不要 · <kbd>U</kbd> 撤回。請切換到英文輸入。</p>
-      <button class="btn plain" id="refresh" type="button">重新整理</button>
     </div>
-    <p class="muted">操作後詞的位置會保留；切換分類或重新整理時才更新清單。</p>
+    <div class="toolbar">
+      <p class="muted" id="shortcuts" title="使用英文輸入；已處理的詞只保留上一筆">↑↓ 選詞 · <kbd>A</kbd> 加入 · <kbd>D</kbd> 不要 · <kbd>U</kbd> 撤回</p>
+      <button class="btn plain" id="refresh" type="button">重整</button>
+    </div>
+
     <p id="review-message" class="muted" role="status" aria-live="polite"></p>
     <div class="card">
       <table aria-describedby="shortcuts">
-        <thead><tr><th>詞</th><th>打的注音</th><th>裝置</th><th>次數</th><th>最後出現</th><th></th></tr></thead>
+        <thead><tr><th>詞</th><th>注音</th><th>裝置</th><th>次數</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>沒有詞</div>
@@ -165,6 +173,24 @@ kbd { font: inherit; font-weight: 600; }
   var loading = false;
   var saving = 0;
   var generation = 0;
+  var decisionOrder = 0;
+
+  function lastReviewed() {
+    return entries.reduce(function (last, entry) {
+      return entry.saved && !entry.saving && !entry.error && entry.status !== status && (!last || entry.order > last.order) ? entry : last;
+    }, null);
+  }
+
+  function updateVisibleRows() {
+    var last = lastReviewed();
+    entries.forEach(function (entry) {
+      entry.row.hidden = !!(entry.saved && !entry.saving && !entry.error && entry.status !== status && entry !== last);
+    });
+    if (entries[selected] && entries[selected].row.hidden) {
+      var index = entries.findIndex(function (entry) { return !entry.row.hidden && entry.status === status; });
+      select(index >= 0 ? index : entries.indexOf(last), false);
+    }
+  }
 
   function updateControls() {
     document.querySelectorAll('.tabs button').forEach(function (b) {
@@ -217,19 +243,20 @@ kbd { font: inherit; font-weight: 600; }
       var label = document.createElement('span');
       label.textContent = entry.status === 'approved' ? '已加入 ' : '不要 ';
       act.appendChild(label);
-      act.appendChild(button('改回待審', 'plain', 'pending', entry));
+      act.appendChild(button('撤回', 'plain', 'pending', entry));
     }
     var state = document.createElement('span');
     state.className = 'save-state' + (entry.error ? ' failed' : '');
     state.setAttribute('role', entry.error ? 'alert' : 'status');
-    state.textContent = entry.saving ? '儲存中…' : entry.error ? '儲存失敗，請重試：' + entry.error : entry.saved ? '已儲存' : '';
-    if (entry.error) state.title = state.textContent;
+    state.textContent = entry.saving ? '儲存中…' : entry.error ? '儲存失敗，請重試' : '';
+    if (entry.error) state.title = entry.error;
     act.appendChild(state);
   }
 
   function decide(entry, next, follow) {
     if (loading || entry.saving || entry.status === next) return;
     var previous = entry.status;
+    entry.order = ++decisionOrder;
     entry.status = next;
     entry.saving = true;
     entry.error = '';
@@ -253,6 +280,7 @@ kbd { font: inherit; font-weight: 600; }
         entry.saving = false;
         saving--;
         renderActions(entry);
+        updateVisibleRows();
         updateControls();
       });
   }
@@ -277,9 +305,9 @@ kbd { font: inherit; font-weight: 600; }
         tr.tabIndex = -1;
         tr.appendChild(cell('word', w.text));
         tr.appendChild(cell('typed', w.typed.join('、')));
-        tr.appendChild(cell('num', w.devices + ' 台'));
-        tr.appendChild(cell('num', w.uses + ' 次'));
-        tr.appendChild(cell('num', new Date(w.last_seen).toLocaleDateString('zh-TW')));
+        tr.appendChild(cell('num', w.devices));
+        tr.appendChild(cell('num', w.uses));
+
         var act = cell('act', '');
         var entry = { word: w, status: w.status || requestedStatus, row: tr, actions: act };
         renderActions(entry);
@@ -291,11 +319,11 @@ kbd { font: inherit; font-weight: 600; }
       });
       select(entries.length ? 0 : -1, false);
       $('empty').hidden = entries.length > 0;
-      $('review-message').textContent = '已載入 ' + entries.length + ' 個詞';
+      $('review-message').textContent = '';
     }).catch(function (error) {
       if (request === generation) {
         if (!error.unauthorized) show('review');
-        $('review-message').textContent = '載入失敗，請按重新整理：' + error.message;
+        $('review-message').textContent = '載入失敗，請重整：' + error.message;
         // Do not apply another tab's actions to rows left from the old tab.
         entries = [];
         $('rows').textContent = '';
@@ -333,10 +361,14 @@ kbd { font: inherit; font-weight: 600; }
     var key = e.key.toLowerCase();
     if (key === 'arrowdown' || key === 'arrowup') {
       e.preventDefault();
-      select(Math.max(0, Math.min(entries.length - 1, selected + (key === 'arrowdown' ? 1 : -1))), true);
+      var step = key === 'arrowdown' ? 1 : -1;
+      var index = selected + step;
+      while (index >= 0 && index < entries.length && entries[index].row.hidden) index += step;
+      if (index >= 0 && index < entries.length) select(index, true);
       return;
     }
     var entry = entries[selected];
+    if (key === 'u' && (!entry || entry.status === 'pending')) entry = lastReviewed();
     if (!entry || entry.saving) return;
     var next = key === 'a' && entry.status === 'pending' ? 'approved'
       : key === 'd' && entry.status === 'pending' ? 'rejected'

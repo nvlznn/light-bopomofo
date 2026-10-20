@@ -136,3 +136,33 @@ test('editing the filter does not activate review shortcuts', async () => {
   assert.equal(p.requests.length, 1);
   assert.match(p.document.getElementById('review-message').textContent, /整數/);
 });
+
+test('only the most recently reviewed word remains, regardless of response order', async () => {
+  const p = await page();
+  p.key('a');
+  p.key('d');
+  p.requests[2].resolve(response(null, 204));
+  await tick();
+  assert.equal(p.rows()[0].hidden, false, 'in-flight save remains visible');
+  p.requests[1].resolve(response(null, 204));
+  await tick();
+  assert.equal(p.rows()[0].hidden, true);
+  assert.equal(p.rows()[1].hidden, false);
+  assert.equal(p.rows()[2].hidden, false);
+  p.key('ArrowUp');
+  assert.equal(p.rows()[1].getAttribute('data-selected'), 'true');
+  p.key('ArrowUp');
+  assert.equal(p.rows()[1].getAttribute('data-selected'), 'true', 'skip hidden rows');
+});
+
+test('U from the next pending word undoes the previous decision', async () => {
+  const p = await page();
+  p.key('a');
+  p.requests[1].resolve(response(null, 204));
+  await tick();
+  p.key('u');
+  assert.deepEqual(JSON.parse(p.requests[2].options.body), { text: words[0].text, status: 'pending' });
+  p.requests[2].resolve(response(null, 204));
+  await tick();
+  assert.equal(p.rows()[0].hidden, false);
+});
