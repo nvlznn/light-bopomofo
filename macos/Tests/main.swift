@@ -1,7 +1,7 @@
 // Composer behaviour against the real engine and lexicon.
 // Run with macos/test.sh.
 
-import Foundation
+import AppKit
 
 var failures = 0
 
@@ -81,10 +81,33 @@ do {
 // Keys with an empty composition go to the app.
 do {
     let c = makeComposer()
-    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol("ˇ"), .symbol(Composer.firstTone),
+    for key in [Key.commit, .backspace, .escape, .previous, .next, .other, .symbol(Composer.firstTone),
                 .select(1), .pagePrevious, .pageNext, .abandon] {
         check(c.handle(key) == KeyResult(handled: false), "\(key) passes through when empty")
     }
+    // A tone alone types its mark, as in the system 注音.
+    for tone in "ˊˇˋ˙" {
+        check(c.handle(.symbol(tone)) == KeyResult(handled: true, commit: String(tone)), "\(tone) alone types itself")
+    }
+    check(c.isEmpty, "a tone alone starts no composition")
+}
+
+// Key events → keys: Shift+Option types what Shift does, but ” 《 》 on ' , .
+do {
+    func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ chars: String) -> Key {
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
+                                     context: nil, characters: chars, charactersIgnoringModifiers: chars,
+                                     isARepeat: false, keyCode: code)!
+        return Key(event: event, composing: false)
+    }
+    let both: NSEvent.ModifierFlags = [.shift, .option]
+    check(key(18, both, "1") == .punctuation("！"), "Shift+Option+1")
+    check(key(33, both, "[") == .punctuation("『"), "Shift+Option+[")
+    check(key(39, both, "'") == .punctuation("”"), "Shift+Option+'")
+    check(key(43, both, ",") == .punctuation("《"), "Shift+Option+,")
+    check(key(47, both, ".") == .punctuation("》"), "Shift+Option+.")
+    check(key(47, .option, ".") == .punctuation("．"), "Option+.")
+    check(key(0, both, "a") == .other, "Shift+Option+letter goes to the app")
 }
 
 // Backspace and Escape.

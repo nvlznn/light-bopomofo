@@ -53,8 +53,11 @@ final class Composer {
     func handle(_ key: Key) -> KeyResult {
         switch key {
         case .symbol(let s):
+            // Alone, a tone types its mark (as in the system 注音); Space is
+            // still a space.
             if isEmpty && Composer.tones.contains(s) {
-                return KeyResult(handled: false)
+                return s == Composer.firstTone
+                    ? KeyResult(handled: false) : KeyResult(handled: true, commit: String(s))
             }
             // Space after a tone: the syllable is already finished.
             if s == Composer.firstTone, let last = symbols.last, Composer.tones.contains(last) {
