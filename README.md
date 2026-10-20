@@ -10,6 +10,17 @@
 
 想打得更準時，多打幾個注音或加上聲調，候選就會縮小。輸入法會記住你的選擇，常打的字詞越用越前面。
 
+### 中英混打
+
+不用切換輸入法：
+
+- **常見的英文詞直接打**：`google`、`iphone`、`email` 照英文的鍵打，就會出現 Google、iPhone、email，也能接在句子裡（ㄋㄏ + `app` → 你好app）。英文的鍵常落在韻母上（app 是 ㄇㄣㄣ），簡拼幾乎都是聲母，所以兩者很少互相搶。詞表在 `crates/lightbopomofo-core/english.csv`。
+- **大寫字母開始英文**：Shift+字母開始一段英文，直到空白、Enter 或標點：`iPhone`、`API`、`5G`、`Node.js`。英文前面的注音照樣轉換（ㄋㄏ + `API` → 你好API）；英文從哪裡開始猜錯時，按 Tab 換。
+- **其他小寫英文**：打的鍵本身是第一頁最後一個候選。
+- **會記住**：用過的英文下次直接用小寫打就會出現（打過一次 `Figma`，之後 `figma` 就是 Figma）。英文只存在本機，不會被「分享新詞」傳出去。
+
+和簡拼分不開的英文（yes 是 ㄗㄍㄋ、bug 是 ㄖㄧㄕ）不會自動出現，用 Shift 打過一次之後，單獨打才會出現。
+
 ## 下載
 
 **macOS 13 以上（Apple Silicon 與 Intel）**：到 [lightbopomofo.noky.dev](https://lightbopomofo.noky.dev) 或 [GitHub Releases](https://github.com/nvlznn/light-bopomofo/releases/latest) 下載 `LightBopomofo.dmg`，把「輕注音」拖到「應用程式」並打開，它會自動安裝並啟用輸入法。接著在選單列的輸入法選單選「輕注音」。
@@ -29,6 +40,7 @@ Windows 有新版本時跳出通知，按一下就更新。
 | ← → Tab | 選候選；可以只選前段，剩下的接著選 |
 | Shift + 1–9 | 直接送出這一頁的第幾個 |
 | [ ] PageUp PageDown | 換頁 |
+| Shift + 字母 | 開始一段英文，空白、Enter 或標點結束 |
 
 ## 開發
 
@@ -39,6 +51,8 @@ cargo run --release -p lightbopomofo-cli -- ㄋㄏㄇ ㄍㄗㄈㄈ
 cargo run --release -p lightbopomofo-cli -- --dachen sca   # 用大千鍵位輸入
 cargo run --release -p lightbopomofo-cli                   # 互動模式；以 : 開頭的行是大千鍵位
 cargo run --release -p lightbopomofo-cli -- --eval eval/tatoeba.tsv   # 正確率（--no-pairs 比較不用詞組）
+scripts/gen-mixed-eval.py                                              # 產生 eval/mixed.tsv：句子前後接英文詞
+cargo run --release -p lightbopomofo-cli -- --eval eval/mixed.tsv      # 中英混打正確率
 ```
 
 詞組與語料詞頻（`crates/lightbopomofo-core/word-pairs.tsv`）的產生方式見 `scripts/corpus-text.py`、`count-words`、`scripts/word-pairs.py`。

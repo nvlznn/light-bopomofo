@@ -36,7 +36,7 @@ final class Practice {
         var pieces: [(String, Int)] = []
         var rest = lesson.symbols
         for piece in lesson.pieces {
-            let candidates = engine.query(rest)
+            let candidates = Composer.candidates(engine, rest).0
             let index = candidates.firstIndex { $0.text == piece } ?? 0
             let consumed = candidates.indices.contains(index) ? candidates[index].consumed : rest.count
             pieces.append((rest, plan.count))

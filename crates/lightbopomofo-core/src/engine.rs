@@ -28,6 +28,16 @@
 //! type the symbols as they are; it is never learned. No other candidate
 //! mixes characters with symbols a word couldn't explain.
 //!
+//! English: on the 大千 layout every letter key is a bopomofo symbol, so an
+//! English word typed in lowercase arrives as symbols (app is ㄇㄣㄣ). The
+//! keys of every span are looked up among the English words (english.csv,
+//! plus the ones the user typed before) and become edges beside the readings
+//! of the same symbols, scored as English's share of what is typed times the
+//! word's share of English. 簡拼 is mostly initials and English keeps hitting
+//! the finals' keys, so the two rarely compete; when they do, the learned
+//! choice wins like any other (see History). English is never shared as a new
+//! word.
+//!
 //! History: a word the user chose for exactly the same symbols wins its span
 //! (it is lifted just above the span's best word) without making the lattice
 //! prefer splitting into learned pieces. A whole input the user committed
@@ -109,6 +119,8 @@ enum Source {
     Word(u32),
     /// Index into the engine's shortcuts.
     Shortcut(usize),
+    /// Index into the engine's English words.
+    English(usize),
     /// An input symbol no word explains; shows the symbol itself.
     Unknown,
 }
@@ -127,6 +139,56 @@ struct Edge {
 
 /// Built-in shortcuts: `symbols,text` lines; `#` starts a comment.
 pub const SHORTCUTS: &str = include_str!("../shortcuts.csv");
+
+/// Built-in English words: `text,weight` lines; `#` starts a comment.
+pub const ENGLISH: &str = include_str!("../english.csv");
+/// English's share of what is typed, as a log-probability added to a word's
+/// log share of the English words. Tuned on eval/mixed.tsv (an English word
+/// before or after each phrase) and eval/tatoeba.tsv: at -3 the English is
+/// right in the first candidate 96% of the time typed in full and 93% by
+/// first symbols, and no phrase of tatoeba.tsv changes; from -2 on, ㄏㄣㄧ
+/// (很一…, typed in full) starts turning into CPU.
+pub const ENGLISH_SHARE: f64 = -3.0;
+/// A word the user typed in English before but english.csv lacks scores as
+/// an English word of this log share (then its learned lift applies).
+pub const ENGLISH_LEARNED: f64 = -4.0;
+/// Shortest English word looked up.
+pub const ENGLISH_MIN_LEN: usize = 2;
+
+/// Whether the keys of English `text` stand out from 簡拼, which types the
+/// first symbol of each character: mostly initials, and the medials ㄧㄨㄩ
+/// alone (一, 我, 與). A built-in word needs a key of a final (i k l o p are
+/// ㄛㄜㄠㄟㄣ; 8 9 0 , . ; / - the others) to be offered by itself: yes is
+/// ㄗㄍㄋ and bug is ㄖㄧㄕ, everyday 簡拼. The user's own words need not.
+pub fn stands_out_from_jianpin(text: &str) -> bool {
+    use crate::bopomofo::{kind, Kind};
+    english_symbols(text).is_some_and(|symbols| {
+        symbols
+            .iter()
+            .any(|&s| matches!(kind(s), Some(Kind::Final)))
+    })
+}
+
+/// Whether `text` reads as English rather than Chinese: ASCII, with a letter.
+pub fn is_english(text: &str) -> bool {
+    text.is_ascii() && text.chars().any(|c| c.is_ascii_alphabetic())
+}
+
+/// The symbols the 大千 keys of English `text` type (case ignored), or `None`
+/// when some character has no key.
+pub fn english_symbols(text: &str) -> Option<Vec<char>> {
+    text.chars()
+        .map(|c| crate::dachen::symbol(c.to_ascii_lowercase()))
+        .collect()
+}
+
+struct EnglishWord {
+    text: String,
+    score: f64,
+    /// See [`stands_out_from_jianpin`]; a word that doesn't is only offered
+    /// typed alone, never inside a sentence (現在該你了 is not 現yes了).
+    stands_out: bool,
+}
 
 /// Times a word pair's bonus (Lexicon::pair_bonus) in a whole-input path:
 /// tuned on eval/tatoeba.tsv.
@@ -151,6 +213,12 @@ pub struct Engine {
     /// Syllables (without tone) of the characters at least
     /// [`COMMON_SYLLABLE_FREQ`] frequent.
     common_syllables: HashSet<Vec<char>>,
+    /// English words: the built-in ones, then the ones learned from the user.
+    english: Vec<EnglishWord>,
+    builtin_english: usize,
+    /// English words by the symbols their keys type.
+    english_by_symbols: HashMap<Vec<char>, Vec<usize>>,
+    longest_english: usize,
 }
 
 impl Engine {
@@ -165,9 +233,89 @@ impl Engine {
             history,
             shortcuts: Vec::new(),
             common_syllables,
+            english: Vec::new(),
+            builtin_english: 0,
+            english_by_symbols: HashMap::new(),
+            longest_english: 0,
         };
         engine.add_shortcuts(SHORTCUTS);
+        engine.add_english(ENGLISH);
         engine
+    }
+
+    /// Add built-in English words: `text,weight` lines (see [`ENGLISH`]).
+    /// Each scores [`ENGLISH_SHARE`] plus its weight's share of all of them.
+    pub fn add_english(&mut self, source: &str) {
+        self.english.truncate(self.builtin_english);
+        let mut words: Vec<(String, f64)> = self
+            .english
+            .iter()
+            .map(|w| (w.text.clone(), w.score))
+            .collect();
+        let added: Vec<(String, f64)> = source
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.starts_with('#'))
+            .filter_map(|l| l.split_once(','))
+            .filter_map(|(text, weight)| {
+                Some((text.trim().to_string(), weight.trim().parse().ok()?))
+            })
+            .filter(|(text, weight)| {
+                *weight > 0.0
+                    && text.chars().count() >= ENGLISH_MIN_LEN
+                    && is_english(text)
+                    && stands_out_from_jianpin(text)
+            })
+            .collect();
+        // Shares are over the words added together; earlier ones keep theirs.
+        let total: f64 = added.iter().map(|(_, w)| w).sum();
+        words.extend(
+            added
+                .into_iter()
+                .map(|(text, weight)| (text, ENGLISH_SHARE + (weight / total).ln())),
+        );
+        self.english = words
+            .into_iter()
+            .map(|(text, score)| EnglishWord {
+                text,
+                score,
+                stands_out: true,
+            })
+            .collect();
+        self.builtin_english = self.english.len();
+        self.index_english();
+    }
+
+    /// Rebuild the English lookup: the built-in words, then each English
+    /// text the user chose for exactly the symbols its keys type.
+    fn index_english(&mut self) {
+        self.english.truncate(self.builtin_english);
+        let builtin: HashSet<String> = self.english.iter().map(|w| w.text.clone()).collect();
+        for entry in self.history.entries() {
+            let symbols: String = english_symbols(&entry.text)
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            if is_english(&entry.text)
+                && entry.text.chars().count() >= ENGLISH_MIN_LEN
+                && symbols == entry.typed
+                && !builtin.contains(&entry.text)
+                && !self.english.iter().any(|w| w.text == entry.text)
+            {
+                self.english.push(EnglishWord {
+                    stands_out: stands_out_from_jianpin(&entry.text),
+                    text: entry.text,
+                    score: ENGLISH_SHARE + ENGLISH_LEARNED,
+                });
+            }
+        }
+        self.english_by_symbols.clear();
+        self.longest_english = 0;
+        for (i, word) in self.english.iter().enumerate() {
+            let symbols = english_symbols(&word.text).expect("checked when added");
+            self.longest_english = self.longest_english.max(symbols.len());
+            self.english_by_symbols.entry(symbols).or_default().push(i);
+        }
     }
 
     /// Add `symbols,text` lines (see [`SHORTCUTS`]).
@@ -292,6 +440,43 @@ impl Engine {
                 best[start][end] = Some(edge);
                 if start == 0 {
                     from_zero.push((edge, 0));
+                }
+            }
+        }
+
+        // English words typed as their keys, beside the readings of the same
+        // symbols; a learned one is lifted below like any learned word.
+        for start in 0..n {
+            let longest = n.min(start + self.longest_english);
+            for end in start + ENGLISH_MIN_LEN..=longest {
+                let Some(ids) = self.english_by_symbols.get(&input[start..end]) else {
+                    continue;
+                };
+                let typed: String = input[start..end].iter().collect();
+                let alone = start == 0 && end == n;
+                for &i in ids.iter().filter(|&&i| alone || self.english[i].stands_out) {
+                    let edge = Edge {
+                        start,
+                        end,
+                        source: Source::English(i),
+                        score: self.english[i].score,
+                        cut: false,
+                        preferred: false,
+                    };
+                    let cell = &mut best[start][end];
+                    if cell.is_none_or(|c| edge.score > c.score) {
+                        *cell = Some(edge);
+                    }
+                    if with_pairs {
+                        alts[start][end].push(edge);
+                    }
+                    let used = self.history.count(&typed, &self.english[i].text);
+                    if start == 0 {
+                        from_zero.push((edge, used));
+                    }
+                    if used > 0 {
+                        learned.push((edge, used));
+                    }
                 }
             }
         }
@@ -469,6 +654,9 @@ impl Engine {
         }
         choices.retain(|(_, t)| !t.chars().any(crate::bopomofo::is_symbol));
         self.history.record(&choices);
+        if choices.iter().any(|(_, t)| is_english(t)) {
+            self.index_english();
+        }
     }
 
     pub fn learn_str(&mut self, input: &str, text: &str) {
@@ -481,7 +669,8 @@ impl Engine {
     }
 
     /// Learned choices whose text is not a word of the lexicon: words the
-    /// user put together (分享新詞), most recent first.
+    /// user put together (分享新詞), most recent first. Never anything with
+    /// English in it: that is names, accounts and the like, not words to add.
     pub fn new_words(&self) -> Vec<HistoryEntry> {
         let words: HashSet<&str> = (0..self.lexicon.len() as u32)
             .map(|id| self.lexicon.entry(id).text())
@@ -490,27 +679,37 @@ impl Engine {
             .entries()
             .into_iter()
             .filter(|e| !words.contains(e.text.as_str()))
+            .filter(|e| !e.text.chars().any(|c| c.is_ascii_alphanumeric()))
             .collect()
     }
 
     /// Forget one learned choice; returns whether it existed.
     pub fn forget(&mut self, typed: &str, text: &str) -> std::io::Result<bool> {
-        self.history.forget(typed, text)
+        let forgot = self.history.forget(typed, text);
+        self.index_english();
+        forgot
     }
 
     pub fn clear_history(&mut self) -> std::io::Result<()> {
-        self.history.clear()
+        let cleared = self.history.clear();
+        self.index_english();
+        cleared
     }
 
     /// Re-read the history file after another process changed it.
     pub fn reload_history(&mut self) {
         self.history.reload();
+        self.index_english();
     }
 
     /// Re-read the history file only if it changed (cheap otherwise). Call
     /// before a new composition when other processes share the file.
     pub fn refresh_history(&mut self) -> bool {
-        self.history.reload_if_changed()
+        let changed = self.history.reload_if_changed();
+        if changed {
+            self.index_english();
+        }
+        changed
     }
 
     /// For each position, the end positions of valid slots starting there.
@@ -654,6 +853,7 @@ impl Engine {
         match source {
             Source::Word(id) => Some(self.lexicon.entry(id).text()),
             Source::Shortcut(i) => Some(&self.shortcuts[i].1),
+            Source::English(i) => Some(&self.english[i].text),
             Source::Unknown => None,
         }
     }

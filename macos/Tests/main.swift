@@ -85,11 +85,106 @@ do {
                 .select(1), .pagePrevious, .pageNext, .abandon] {
         check(c.handle(key) == KeyResult(handled: false), "\(key) passes through when empty")
     }
-    // A tone alone types its mark, as in the system 注音.
+    // A tone alone types its mark, as in the system 注音, once the next key
+    // shows it is not the start of English (4G).
     for tone in "ˊˇˋ˙" {
-        check(c.handle(.symbol(tone)) == KeyResult(handled: true, commit: String(tone)), "\(tone) alone types itself")
+        check(c.handle(.symbol(tone)) == KeyResult(handled: true), "\(tone) alone waits")
+        check(c.composingText == String(tone), "\(tone) shown")
+        check(c.handle(.symbol("ㄋ")) == KeyResult(handled: true, commit: String(tone)), "\(tone) typed by the next key")
+        c.reset()
     }
-    check(c.isEmpty, "a tone alone starts no composition")
+    check(c.handle(.symbol("ˋ")) == KeyResult(handled: true), "ˋ waits")
+    check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: false, commit: "ˋ"), "then Space types ˋ and a space")
+    check(c.isEmpty, "nothing left")
+    _ = c.handle(.symbol("ˋ"))
+    _ = c.handle(.next)
+    check(c.handle(.commit) == KeyResult(handled: true, commit: "4"), "Tab picks the digit")
+}
+
+// Mixed English: a capital starts English, Space ends it.
+do {
+    let engine = Engine(lexiconPath: CommandLine.arguments[1], historyPath: nil)!
+    let c = Composer(engine: engine)
+    func keys(_ keys: String) {
+        for k in keys {
+            _ = c.handle(k.isUppercase ? .letter(k) : .symbol(Engine.bopomofo(forKey: k)!))
+        }
+    }
+    func whole(_ input: String) -> String {
+        engine.query(input).first { $0.consumed == input.count }!.text
+    }
+    keys("iPhone")
+    check(c.composingText == "ㄛPhone", "shown as typed: \(c.composingText)")
+    check(c.candidates.first?.text == "iPhone", "iPhone: \(c.candidates.prefix(3).map(\.text))")
+    check(c.handle(.symbol(Composer.firstTone)) == KeyResult(handled: false, commit: "iPhone"), "space ends it")
+    check(c.isEmpty, "empty after English")
+
+    type(c, "ㄋㄏ")
+    keys("API")
+    check(c.candidates.first?.text == whole("ㄋㄏ") + "API", "你好API: \(c.candidates.prefix(3).map(\.text))")
+    check(select(c, "scAPI"), "other starts a Tab away")
+    check(c.handle(.commit) == KeyResult(handled: true, commit: "scAPI"), "commit scAPI")
+
+    type(c, "ㄋㄏ")
+    keys("iPad")
+    check(c.candidates.first?.text == whole("ㄋㄏ") + "iPad", "takes the i: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+    keys("5G")
+    check(c.candidates.first?.text == "5G", "5G: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+    keys("1080P")
+    check(c.candidates.first?.text == "1080P", "1080P")
+    c.reset()
+    type(c, "ㄋㄧˇ")
+    keys("API")
+    check(c.candidates.first?.text == whole("ㄋㄧˇ") + "API", "a tone after bopomofo stays a tone")
+    c.reset()
+
+    // 4G: the tone alone waits, the capital makes it a digit.
+    _ = c.handle(.symbol("ˋ"))
+    keys("G")
+    check(c.candidates.first?.text == "4G", "4G: \(c.candidates.first?.text ?? "-")")
+    check(c.handle(.punctuation("，")) == KeyResult(handled: true, commit: "4G，"), "punctuation ends it")
+
+    keys("Node")
+    _ = c.handle(.symbol("ㄡ"))  // .
+    keys("js")
+    check(c.candidates.first?.text == "Node.js", "Node.js: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+
+    type(c, "ㄋㄏ")
+    keys("A")
+    check(c.handle(.backspace).handled && c.composingText == "ㄋㄏ", "backspace back into bopomofo")
+    check(c.candidates.first?.text == whole("ㄋㄏ"), "bopomofo candidates again")
+    c.reset()
+
+    // English words the engine knows come out typed in lowercase, no Shift.
+    keys("google")
+    check(c.candidates.first?.text == "Google", "google: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+    type(c, "ㄋㄏ")
+    keys("email")
+    check(c.candidates.first?.text == whole("ㄋㄏ") + "email", "你好email: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+
+    // Other lowercase English: the keys at the end of the first page, then learned.
+    keys("kahoot")
+    let at = c.candidates.firstIndex { $0.text == "kahoot" }
+    check(at == min(c.candidates.count - 1, Composer.pageSize - 1), "kahoot at \(String(describing: at))")
+    check(c.handle(.select((at ?? 0) + 1)) == KeyResult(handled: true, commit: "kahoot"), "shift+number types kahoot")
+    keys("kahoot")
+    check(c.candidates.first?.text == "kahoot", "kahoot learned: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+    // Typed with Shift once: comes back in lowercase.
+    keys("Figjam")
+    _ = c.handle(.commit)
+    keys("figjam")
+    check(c.candidates.first?.text == "Figjam", "Figjam learned: \(c.candidates.first?.text ?? "-")")
+    c.reset()
+    check(engine.newWords().isEmpty, "English is never shared")
+    // Not offered for initials only (簡拼).
+    type(c, "ㄏㄏ")
+    check(!c.candidates.contains { $0.text == "cc" }, "no cc for ㄏㄏ")
 }
 
 // Key events → keys: Shift+Option types what Shift does, but ” 《 》 on ' , .

@@ -31,6 +31,15 @@
 | 本專案的使用方式 | 只散布**統計數字**，不散布任何原文：以新酷音詞庫斷詞後，每個詞的出現次數，以及常一起出現的前後詞與其點互資訊（前 200 萬組）。產生方式見 `scripts/corpus-text.py`、`count-words`、`scripts/word-pairs.py`。`build-lexicon` 把它編進 `lexicon.bin`：詞頻與新酷音的頻率各半混合，詞組用來替整句轉換加分 |
 | 標示方式 | 本文件；官網與 README |
 
+## 英文詞表：`english.csv`
+
+| 項目 | 內容 |
+|---|---|
+| 來源 | 為輕注音整理的常用英文詞、品牌與縮寫，附上相對常用程度（權重） |
+| 授權 | 和程式碼一樣採用 **MIT**（見 [LICENSE](LICENSE)） |
+| 本專案的使用方式 | 引擎以 `include_str!` 編進程式，用來在注音旁邊提供英文候選 |
+
 ## 不隨安裝檔散布的資料
 - repo 不包含 `tsi.csv`。建置時由 `scripts/fetch-lexicon.sh` 從上述固定的 commit 下載。
 - `eval/tatoeba.tsv`：評估用的日常短句，取自 Tatoeba（https://tatoeba.org，CC BY 2.0 FR），由 `scripts/gen-eval.py` 產生，只用於 `lb-cli --eval`。
+- `eval/mixed.tsv`：`eval/tatoeba.tsv` 的短句前後接上 `english.csv` 的英文詞（同樣是 CC BY 2.0 FR），由 `scripts/gen-mixed-eval.py` 產生，只用於 `lb-cli --eval`。

@@ -306,3 +306,197 @@ fn only_the_bopomofo_candidate_shows_symbols() {
         assert!(candidates.iter().any(|c| c.text == input), "{input}");
     }
 }
+
+/// Type 大千 keys: lowercase as bopomofo, uppercase with Shift.
+fn keys(c: &mut Composer, e: &mut Engine, keys: &str) {
+    for k in keys.chars() {
+        let key = if k.is_ascii_uppercase() {
+            Key::Letter(k)
+        } else {
+            Key::Symbol(lightbopomofo_core::dachen::symbol(k).unwrap())
+        };
+        c.handle(e, key);
+    }
+}
+
+/// The whole conversion of `input`, as the English candidates use it.
+fn whole(e: &Engine, input: &str) -> String {
+    let n = input.chars().count();
+    e.query_str(input)
+        .into_iter()
+        .find(|x| x.consumed == n)
+        .unwrap()
+        .text
+}
+
+#[test]
+fn a_capital_starts_english_and_space_ends_it() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    keys(&mut c, &mut e, "iPhone");
+    assert_eq!(c.composing_text(), "ㄛPhone");
+    assert_eq!(first(&c), "iPhone");
+    assert_eq!(
+        c.handle(&mut e, Key::Symbol(FIRST_TONE)),
+        KeyResult {
+            handled: false,
+            commit: "iPhone".into()
+        }
+    );
+    assert!(c.is_empty());
+    // Learned as its keys: in lowercase it comes back as typed; never shared.
+    keys(&mut c, &mut e, "iphone");
+    assert_eq!(first(&c), "iPhone");
+    assert!(e.new_words().is_empty());
+}
+
+#[test]
+fn english_typed_once_comes_back_in_lowercase() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    keys(&mut c, &mut e, "kahoot");
+    assert_ne!(first(&c), "Kahoot");
+    c.reset();
+    // Typed once with Shift, after Chinese: only the English part is learned.
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "Kahoot");
+    c.handle(&mut e, Key::Commit);
+    keys(&mut c, &mut e, "kahoot");
+    assert_eq!(first(&c), "Kahoot");
+    assert!(e.new_words().is_empty(), "English is never shared");
+}
+
+#[test]
+fn english_after_bopomofo_keeps_the_chinese() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "API");
+    assert_eq!(first(&c), format!("{}API", whole(&e, "ㄋㄏ")));
+    // Other places it could start are a Tab away.
+    assert!(c.candidates().iter().any(|x| x.text == "scAPI"));
+    assert!(select(&mut c, &mut e, "scAPI"));
+    assert_eq!(c.handle(&mut e, Key::Commit), handled("scAPI"));
+    assert!(c.is_empty());
+}
+
+#[test]
+fn english_takes_the_lowercase_start_and_digits_before_it() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "iPad");
+    assert_eq!(first(&c), format!("{}iPad", whole(&e, "ㄋㄏ")));
+    c.reset();
+    keys(&mut c, &mut e, "5G");
+    assert_eq!(first(&c), "5G");
+    c.reset();
+    keys(&mut c, &mut e, "1080P");
+    assert_eq!(first(&c), "1080P");
+    c.reset();
+    // A tone after bopomofo stays a tone: 你 + API.
+    typing(&mut c, &mut e, "ㄋㄧˇ");
+    keys(&mut c, &mut e, "API");
+    assert_eq!(first(&c), format!("{}API", whole(&e, "ㄋㄧˇ")));
+}
+
+#[test]
+fn english_alone_and_punctuation_ending_it() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    // 4G: the 4 alone went to the app, G starts English by itself.
+    keys(&mut c, &mut e, "G");
+    assert_eq!(c.composing_text(), "G");
+    assert_eq!(first(&c), "G");
+    c.reset();
+    keys(&mut c, &mut e, "API");
+    assert_eq!(
+        c.handle(&mut e, Key::Punctuation("，".into())),
+        handled("API，")
+    );
+    assert!(c.is_empty());
+    // Keys that are bopomofo or tones type their letter or digit in English.
+    keys(&mut c, &mut e, "Node");
+    c.handle(&mut e, Key::Symbol('ㄡ')); // .
+    keys(&mut c, &mut e, "js");
+    assert_eq!(first(&c), "Node.js");
+    c.reset();
+    keys(&mut c, &mut e, "M");
+    c.handle(&mut e, Key::Symbol('ˇ')); // 3
+    assert_eq!(first(&c), "M3");
+}
+
+#[test]
+fn backspace_back_into_bopomofo() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "A");
+    assert!(c.handle(&mut e, Key::Backspace).handled);
+    assert_eq!(c.composing_text(), "ㄋㄏ");
+    assert_eq!(first(&c), whole(&e, "ㄋㄏ"));
+    keys(&mut c, &mut e, "A");
+    assert!(c.handle(&mut e, Key::Escape).handled);
+    assert!(c.is_empty());
+}
+
+#[test]
+fn lowercase_english_is_on_the_first_page_and_learned() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    // Not an English word the engine knows: the keys themselves are offered.
+    keys(&mut c, &mut e, "kahoot");
+    let at = c.candidates().iter().position(|x| x.text == "kahoot");
+    assert_eq!(at, Some((c.candidates().len() - 1).min(PAGE_SIZE - 1)));
+    assert_eq!(
+        c.handle(&mut e, Key::Select(at.unwrap() + 1)),
+        handled("kahoot")
+    );
+    assert!(c.is_empty());
+    keys(&mut c, &mut e, "kahoot");
+    assert_eq!(first(&c), "kahoot", "learned");
+    assert!(e.new_words().is_empty(), "English is never shared");
+    c.reset();
+    // Not offered for keys with Space in them, or for initials only (簡拼).
+    typing(&mut c, &mut e, "ㄊㄧㄢˉ");
+    assert!(c.candidates().iter().all(|x| x.text != "wu0 "));
+    c.reset();
+    typing(&mut c, &mut e, "ㄏㄏ");
+    assert!(c.candidates().iter().all(|x| x.text != "cc"));
+}
+
+#[test]
+fn english_flushes_at_max_length() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    let mut flushed = String::new();
+    for _ in 0..=MAX_SYMBOLS {
+        flushed += &c.handle(&mut e, Key::Letter('A')).commit;
+    }
+    assert_eq!(flushed, "A".repeat(MAX_SYMBOLS));
+    assert_eq!(c.composing_text(), "A");
+}
+
+#[test]
+fn english_words_come_out_typed_in_lowercase() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    // Built-in English words, alone and inside Chinese; no Shift.
+    keys(&mut c, &mut e, "google");
+    assert_eq!(first(&c), "Google");
+    c.reset();
+    keys(&mut c, &mut e, "iphone");
+    assert_eq!(first(&c), "iPhone");
+    c.reset();
+    typing(&mut c, &mut e, "ㄋㄏ");
+    keys(&mut c, &mut e, "email");
+    assert_eq!(first(&c), format!("{}email", whole(&e, "ㄋㄏ")));
+    c.reset();
+    // Keys that are everyday 簡拼 stay Chinese: yes is ㄗㄍㄋ.
+    typing(&mut c, &mut e, "ㄒㄗㄍㄋㄌ");
+    assert!(!first(&c).contains("yes"), "{}", first(&c));
+}
+
+#[test]
+fn learned_english_that_looks_like_jianpin_comes_only_alone() {
+    let (mut e, mut c) = (engine(), Composer::new());
+    keys(&mut c, &mut e, "Yes");
+    c.handle(&mut e, Key::Commit);
+    keys(&mut c, &mut e, "yes");
+    assert_eq!(first(&c), "Yes", "typed alone");
+    c.reset();
+    let before = whole(&engine(), "ㄒㄗㄍㄋㄌ");
+    typing(&mut c, &mut e, "ㄒㄗㄍㄋㄌ");
+    assert_eq!(first(&c), before, "not inside a sentence");
+}

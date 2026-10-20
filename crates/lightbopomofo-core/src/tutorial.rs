@@ -60,7 +60,7 @@ impl Practice {
         let mut pieces = Vec::new();
         let mut rest: Vec<char> = lesson.symbols.chars().collect();
         for piece in lesson.pieces {
-            let candidates = engine.query(&rest);
+            let candidates = crate::composer::candidates(engine, &rest);
             let (index, consumed) = candidates
                 .iter()
                 .enumerate()
