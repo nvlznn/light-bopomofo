@@ -23,6 +23,10 @@ extension Key {
         47: (nil, "。", "．"),  // .
         44: (nil, "？", "／"),  // /
     ]
+    /// Shift+Option types what Shift does, except on these keys.
+    private static let shiftOption: [UInt16: String] = [
+        39: "”", 43: "《", 47: "》",  // ' , .
+    ]
 
     /// Number keys 1–9 by key code (the keypad's are separate keys).
     private static let digits: [UInt16: Int] = [
@@ -39,7 +43,6 @@ extension Key {
         // PageDown carry .numericPad too, so they are exempt from that one.
         let isNavigation = (123...126).contains(event.keyCode) || [116, 121].contains(event.keyCode)
         if !flags.isDisjoint(with: [.command, .control])
-            || flags.isSuperset(of: [.shift, .option])
             || (flags.contains(.option) && punctuation[event.keyCode] == nil)
             || (flags.contains(.numericPad) && !isNavigation)
         {
@@ -62,6 +65,9 @@ extension Key {
         }
         if flags.contains(.shift), composing, let n = digits[event.keyCode] { return .select(n) }
         if let p = punctuation[event.keyCode] {
+            if flags.isSuperset(of: [.shift, .option]) {
+                return .punctuation(shiftOption[event.keyCode] ?? p.shift)
+            }
             if flags.contains(.shift) { return .punctuation(p.shift) }
             if flags.contains(.option) { return .punctuation(p.option) }
             if let plain = p.plain { return .punctuation(plain) }
