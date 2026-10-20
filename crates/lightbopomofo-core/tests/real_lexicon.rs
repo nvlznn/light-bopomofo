@@ -7,14 +7,16 @@ use lightbopomofo_core::{Candidate, Engine, History, Lexicon};
 
 fn engine() -> &'static Engine {
     static ENGINE: OnceLock<Engine> = OnceLock::new();
-    ENGINE.get_or_init(|| {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
-        let pairs = concat!(env!("CARGO_MANIFEST_DIR"), "/word-pairs.tsv");
-        let source = std::fs::read_to_string(path)
-            .expect("data/tsi.csv missing: run scripts/fetch-lexicon.sh");
-        let lexicon = Lexicon::parse_with_pairs(&source, &std::fs::read_to_string(pairs).unwrap());
-        Engine::new(lexicon, History::in_memory())
-    })
+    ENGINE.get_or_init(|| engine_with_history(History::in_memory()))
+}
+
+fn engine_with_history(history: History) -> Engine {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/tsi.csv");
+    let pairs = concat!(env!("CARGO_MANIFEST_DIR"), "/word-pairs.tsv");
+    let source = std::fs::read_to_string(path)
+        .expect("data/tsi.csv missing: run scripts/fetch-lexicon.sh");
+    let lexicon = Lexicon::parse_with_pairs(&source, &std::fs::read_to_string(pairs).unwrap());
+    Engine::new(lexicon, history)
 }
 
 fn texts(c: &[Candidate]) -> Vec<&str> {
@@ -65,6 +67,15 @@ fn full_syllable_is_not_split() {
         );
     }
     assert_eq!(top("ㄊㄧㄢ", 4), ["天", "田", "甜", "填"]);
+}
+
+#[test]
+fn learned_characters_do_not_beat_a_spelled_out_word() {
+    let mut history = History::in_memory();
+    history.record(&[("ㄐ", "間"), ("ㄏ", "回"), ("ㄧ", "有"), ("ㄢ", "按")]);
+    let e = engine_with_history(history);
+    let c = e.query_str("ㄏㄨㄛㄐㄧㄢ");
+    assert_eq!(c[0].text, "火箭", "{:?}", texts(&c[..3]));
 }
 
 #[test]

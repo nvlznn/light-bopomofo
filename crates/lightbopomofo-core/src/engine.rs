@@ -121,8 +121,7 @@ struct Edge {
     score: f64,
     /// Some slot is cut short (see [`SLOT_CUT`]).
     cut: bool,
-    /// A shortcut or a learned word: it wins its span (see
-    /// [`PAIR_PREFERRED_LIFT`]).
+    /// A curated shortcut: it wins its span (see [`PAIR_SHORTCUT_LIFT`]).
     preferred: bool,
 }
 
@@ -139,10 +138,10 @@ pub const PAIR_BEAM: usize = 8;
 /// Whole conversions offered from the search with word pairs (then the plain
 /// one, without pairs, if different).
 pub const PAIR_WHOLES: usize = 2;
-/// Shortcuts and learned words are lifted above their span's best word, but
-/// the pairs inside another reading of the span could still outscore them:
-/// in the search with pairs they get this much more.
-pub const PAIR_PREFERRED_LIFT: f64 = 10.0;
+/// A curated shortcut gets this extra lift in the search with word pairs.
+/// Learned words already have a span-local lift; rewarding each learned piece
+/// here would make a string of learned characters beat a spelled-out word.
+pub const PAIR_SHORTCUT_LIFT: f64 = 10.0;
 
 pub struct Engine {
     lexicon: Lexicon,
@@ -306,7 +305,6 @@ impl Engine {
         for (edge, used) in &learned {
             let lifted = Edge {
                 score: lift(edge, *used, &raw_best),
-                preferred: true,
                 ..*edge
             };
             let cell = &mut best[edge.start][edge.end];
@@ -732,7 +730,7 @@ impl Engine {
                             (Some(a), Some(b)) => self.lexicon.pair_bonus(a, b),
                             _ => 0.0,
                         };
-                        let lift = if edge.preferred { PAIR_PREFERRED_LIFT } else { 0.0 };
+                        let lift = if edge.preferred { PAIR_SHORTCUT_LIFT } else { 0.0 };
                         next.push(Path {
                             score: p.score + edge.score + PAIR_WEIGHT * bonus + lift,
                             word,
