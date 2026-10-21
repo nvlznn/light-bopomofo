@@ -673,56 +673,23 @@ private struct Keycap: View {
 
 // MARK: - Switching to 輕注音
 
-/// Adding 輕注音 in System Settings, with a screenshot per step; ticks as
-/// soon as it is there.
+/// Adding 輕注音 in System Settings: every step with its screenshot at once;
+/// ticks as soon as it is there.
 private struct AddStep: View {
     @EnvironmentObject private var model: AppModel
-    @State private var shown = 0
-
-    private static let steps = [
-        "打開「系統設定」→「鍵盤」，按「輸入方式」旁的「編輯…」",
-        "按左下角「＋」",
-        "左邊選「繁體中文」，右邊選「輕注音」，按「加入」",
-    ]
-    private static let images = (1...3).map {
-        Bundle.main.url(forResource: "setup-\($0)", withExtension: "png").flatMap(NSImage.init(contentsOf:))
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Title(text: "加入輕注音", chip: "設定")
                 .padding(.top, 34)
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(AddStep.steps.enumerated()), id: \.offset) { index, text in
-                    Button { shown = index } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text("\(index + 1)")
-                                .font(.system(size: 12, weight: .bold).monospacedDigit())
-                                .foregroundStyle(.black)
-                                .frame(width: 20, height: 20)
-                                .background(Circle().fill(index == shown ? Palette.cream : .white.opacity(0.5)))
-                            Text(text)
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(index == shown ? 0.95 : 0.6))
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+            VStack(alignment: .leading, spacing: 14) {
+                SetupStep(number: 1, text: "打開系統設定的「鍵盤」，按「編輯…」")
+                HStack(alignment: .top, spacing: 14) {
+                    SetupStep(number: 2, text: "按左下角「＋」")
+                    SetupStep(number: 3, text: "選「輕注音」，按「加入」")
                 }
             }
             .padding(.top, 16)
-            if let image = AddStep.images[shown] {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: 190)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .padding(.top, 14)
-                    .id(shown)
-                    .transition(.opacity)
-            }
             HStack(spacing: 8) {
                 Image(systemName: model.status.isReady ? "checkmark.circle.fill" : "circle.dotted")
                 Text(model.status.isReady ? "已加入" : "還沒加入")
@@ -738,16 +705,44 @@ private struct AddStep: View {
             .foregroundStyle(model.status.isReady ? Palette.cream : .white.opacity(0.75))
             .padding(.top, 14)
         }
-        // Look again every second; the screenshots go round until it is added.
+        // Look again every second until it is added.
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 model.refreshStatus()
-                if !model.status.isReady, Int(Date().timeIntervalSince1970) % 3 == 0 {
-                    withAnimation(.easeOut(duration: 0.3)) { shown = (shown + 1) % AddStep.steps.count }
-                }
             }
         }
+    }
+}
+
+/// One step of adding 輕注音: number and words, its screenshot (setup-N.png) below.
+private struct SetupStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(number)")
+                    .font(.system(size: 12, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.black)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(Palette.cream))
+                Text(text)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let url = Bundle.main.url(forResource: "setup-\(number)", withExtension: "png"),
+               let image = NSImage(contentsOf: url)
+            {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
