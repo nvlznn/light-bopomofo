@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- Registered by the app (Updater.scheduleChecks): checks for a newer
-	     release at login and every 6 hours (it asks at most every 12). -->
+	     release and shares new words at login and every hour. -->
 	<key>Label</key>
 	<string>dev.noky.lightbopomofo.update-check</string>
 	<key>BundleProgram</key>
@@ -16,7 +16,7 @@
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StartInterval</key>
-	<integer>21600</integer>
+	<integer>3600</integer>
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>AssociatedBundleIdentifiers</key>

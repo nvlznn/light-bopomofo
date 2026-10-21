@@ -7,8 +7,18 @@ import { handler, HttpError, query, requireAdmin } from '../_lib.js';
 
 const STATUSES = ['pending', 'approved', 'rejected'];
 
-export default handler(['GET', 'POST'], async (req, res) => {
+export default handler(['GET', 'POST', 'DELETE'], async (req, res) => {
   requireAdmin(req);
+  if (req.method === 'DELETE') {
+    const { text } = req.body ?? {};
+    if (typeof text !== 'string' || !/^\p{Script=Han}{1,20}$/u.test(text)) throw new HttpError(400, 'bad word');
+    await query(`WITH blocked AS (
+      INSERT INTO deleted_words (text) VALUES ($1) ON CONFLICT DO NOTHING
+    ), removed AS (DELETE FROM submissions WHERE text = $1)
+    DELETE FROM decisions WHERE text = $1`, [text]);
+    res.status(204).end();
+    return;
+  }
   if (req.method === 'POST') {
     const { text, status } = req.body ?? {};
     if (typeof text !== 'string' || !STATUSES.includes(status)) throw new HttpError(400, 'bad decision');
@@ -60,5 +70,6 @@ export default handler(['GET', 'POST'], async (req, res) => {
      GROUP BY status`,
     [minUses],
   );
-  res.status(200).json({ status, minUses, words: rows, counts: Object.fromEntries(counts.map((c) => [c.status, c.words])) });
+  const syncs = await query('SELECT device, app, last_synced_at FROM device_syncs ORDER BY last_synced_at DESC LIMIT 20');
+  res.status(200).json({ status, minUses, syncs, lastSyncedAt: syncs[0]?.last_synced_at ?? null, words: rows, counts: Object.fromEntries(counts.map((c) => [c.status, c.words])) });
 });

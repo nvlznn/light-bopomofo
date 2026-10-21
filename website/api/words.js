@@ -15,11 +15,16 @@ export default handler(['POST'], async (req, res) => {
       params.push(device, w.text, w.typed, w.count, app);
     }
     await query(
-      `INSERT INTO submissions (device, text, typed, count, app) VALUES ${values.join(', ')}
+      `INSERT INTO submissions (device, text, typed, count, app)
+       SELECT v.device, v.text, v.typed, v.count::integer, v.app
+       FROM (VALUES ${values.join(', ')}) AS v(device, text, typed, count, app)
+       WHERE NOT EXISTS (SELECT 1 FROM deleted_words d WHERE d.text = v.text)
        ON CONFLICT (device, text, typed) DO UPDATE
        SET count = GREATEST(submissions.count, EXCLUDED.count), app = EXCLUDED.app, last_seen = now()`,
       params,
     );
   }
+  await query(`INSERT INTO device_syncs (device, app) VALUES ($1, $2)
+    ON CONFLICT (device) DO UPDATE SET app = EXCLUDED.app, last_synced_at = now()`, [device, app]);
   res.status(204).end();
 });

@@ -14,7 +14,7 @@ async function page(storage = new Map()) {
   const { document, window } = parseHTML(html);
   const requests = [];
   const fetch = (url, options = {}) => new Promise(resolve => requests.push({ url, options, resolve }));
-  vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { document, window: { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) } }, fetch, console });
+  vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { document, window: { confirm: () => true, localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) } }, fetch, console });
   requests[0].resolve(response(data()));
   await tick();
   const key = (key, extra = {}) => {
@@ -35,7 +35,7 @@ test('saving retains every row and its position without refetching the list', as
   await tick();
   assert.equal(p.requests.length, 2, 'a decision must not trigger another list request');
   assert.deepEqual(p.rows(), before, 'the same row nodes remain in the same order');
-  assert.match(before[0].textContent, /已加入/);
+  assert.match(before[0].textContent, /已核准/);
   assert.equal(p.document.querySelector('[data-status="pending"] .n').textContent, '2');
 });
 
@@ -67,7 +67,7 @@ test('failed saves show an error in place and permit retry', async () => {
   assert.equal(p.requests.length, 3);
   p.requests[2].resolve(response(null, 204));
   await tick();
-  assert.match(row.textContent, /已加入/);
+  assert.match(row.textContent, /已核准/);
 });
 
 test('composition, held keys and modifier shortcuts never submit a decision', async () => {
@@ -165,4 +165,46 @@ test('U from the next pending word undoes the previous decision', async () => {
   p.requests[2].resolve(response(null, 204));
   await tick();
   assert.equal(p.rows()[0].hidden, false);
+});
+
+test('review shows server sync time and per-word receipt time, including empty uploads', async () => {
+  const p = await page();
+  p.document.getElementById('refresh').click();
+  p.requests[1].resolve(response({ ...data(), lastSyncedAt: '2026-10-21T03:00:00Z', syncs: [{ device: 'device-1', app: '6.1', last_synced_at: '2026-10-21T03:00:00Z' }] }));
+  await tick();
+  assert.match(p.document.getElementById('sync-summary').textContent, /最近成功同步/);
+  assert.match(p.document.getElementById('sync-devices').textContent, /device-1.*6\.1/);
+  assert.match(p.rows()[0].textContent, /2026/);
+});
+
+test('delete removes just the selected submission after server success', async () => {
+  const p = await page();
+  const remove = [...p.rows()[0].querySelectorAll('button')].find(b => b.textContent === '刪除');
+  remove.click();
+  assert.equal(p.requests[1].options.method, 'DELETE');
+  assert.deepEqual(JSON.parse(p.requests[1].options.body), { text: words[0].text });
+  assert.equal(p.rows().length, 3, 'keep row until deletion succeeds');
+  p.requests[1].resolve(response(null, 204));
+  await tick();
+  assert.equal(p.rows().length, 2);
+  assert.equal(p.rows()[0].querySelector('.word').textContent, words[1].text);
+});
+
+test('approved word can be added with a reviewed reading, then deleted from the dictionary', async () => {
+  const p = await page();
+  p.key('a'); p.requests[1].resolve(response(null, 204)); await tick();
+  [...p.rows()[0].querySelectorAll('button')].find(b => b.textContent === '加入詞庫').click();
+  assert.equal(p.document.getElementById('dictionary-text').value, words[0].text);
+  p.document.getElementById('dictionary-reading').value = 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ';
+  p.document.getElementById('dictionary-form').onsubmit({ preventDefault() {} });
+  const word = { text: words[0].text, reading: 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ', frequency: 2000 };
+  assert.deepEqual(JSON.parse(p.requests[2].options.body), word);
+  p.requests[2].resolve(response(null, 204)); await tick();
+  assert.equal(p.requests[3].url, '/api/admin/lexicon');
+  p.requests[3].resolve(response({ words: [word] })); await tick();
+  assert.match(p.document.getElementById('dictionary-message').textContent, /已加入正式詞庫/);
+  p.document.querySelector('#dictionary-words button').click();
+  assert.equal(p.requests[4].options.method, 'DELETE');
+  p.requests[4].resolve(response(null, 204)); await tick();
+  assert.equal(p.document.getElementById('dictionary-words').children.length, 0);
 });

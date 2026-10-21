@@ -145,3 +145,51 @@ test('review filter defaults to two uses and supports custom totals across devic
   assert.equal(approved.body.counts.approved, 1);
   assert.equal((await call(adminWords, { method: 'POST', cookie, body: { text: '一次新詞', status: 'pending' } })).status, 204);
 });
+
+test('empty syncs are recorded, invalid uploads do not advance sync time, and admin sees syncs', async () => {
+  const body = { device: device(70), app: '6.1', words: [] };
+  assert.equal((await call(upload, { method: 'POST', body })).status, 204);
+  const first = (await db.query('SELECT * FROM device_syncs WHERE device = $1', [device(70)])).rows[0];
+  assert.equal(first.app, '6.1');
+  assert.ok(first.last_synced_at);
+  assert.equal((await call(upload, { method: 'POST', body: { ...body, words: [{ text: 'bad' }] } })).status, 400);
+  const second = (await db.query('SELECT * FROM device_syncs WHERE device = $1', [device(70)])).rows[0];
+  assert.deepEqual(second.last_synced_at, first.last_synced_at);
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const result = await call(adminWords, { cookie: signed.headers['set-cookie'].split(';')[0] });
+  assert.ok(result.body.lastSyncedAt);
+  assert.ok(result.body.syncs.some(s => s.device === device(70)));
+});
+
+test('deleting a submission is authenticated and prevents hourly uploads from resurrecting it', async () => {
+  const body = { device: device(71), app: '6.1', words: [{ text: '刪除測試', typed: 'ㄕㄔㄘㄕ', count: 2 }] };
+  await call(upload, { method: 'POST', body });
+  assert.equal((await call(adminWords, { method: 'DELETE', body: { text: '刪除測試' } })).status, 401);
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const cookie = signed.headers['set-cookie'].split(';')[0];
+  assert.equal((await call(adminWords, { method: 'DELETE', cookie, body: { text: '刪除測試' } })).status, 204);
+  assert.equal((await call(upload, { method: 'POST', body })).status, 204);
+  assert.equal((await db.query("SELECT * FROM submissions WHERE text = '刪除測試'")).rows.length, 0);
+  assert.equal((await db.query('SELECT * FROM device_syncs WHERE device = $1', [device(71)])).rows.length, 1);
+});
+
+test('curated words require full readings, support multiple readings, export and delete independently', async () => {
+  const { default: lexicon } = await import('../api/admin/lexicon.js');
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const cookie = signed.headers['set-cookie'].split(';')[0];
+  const word = { text: '貢丸湯', reading: 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ', frequency: 2000 };
+  for (const method of ['GET', 'POST', 'DELETE']) assert.equal((await call(lexicon, { method, body: word })).status, 401);
+  for (const reading of ['ㄍㄨㄊ', 'abc', 'ㄍ ㄨ', 'ㄍㄍ ㄨ ㄊ', 'ㄍ ㄨ ㄊ']) {
+    assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, reading } })).status, 400);
+  }
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: word })).status, 204);
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, frequency: 2500 } })).status, 204);
+  const alternate = { ...word, reading: 'ㄍㄨㄥ ㄨㄢˊ ㄊㄤ' };
+  await call(lexicon, { method: 'POST', cookie, body: alternate });
+  const list = await call(lexicon, { cookie });
+  assert.equal(list.body.words.length, 2);
+  assert.equal(list.body.words.find(w => w.reading === word.reading).frequency, 2500);
+  assert.equal((await call(exportWords, { cookie })).body.lexicon.length, 2);
+  assert.equal((await call(lexicon, { method: 'DELETE', cookie, body: alternate })).status, 204);
+  assert.deepEqual((await call(exportWords, { cookie })).body.lexicon, [{ ...word, frequency: 2500 }]);
+});

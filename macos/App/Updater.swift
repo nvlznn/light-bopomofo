@@ -4,7 +4,7 @@ import ServiceManagement
 import UserNotifications
 
 /// Updating in place: a background item runs this app with --check-update
-/// every few hours; when GitHub has a newer release it downloads the dmg,
+/// every hour; when GitHub has a newer release it downloads the dmg,
 /// checks that it is signed by us and replaces this app, then puts the new
 /// input method in place once the user stops typing, and says so. When that
 /// cannot happen (the window is open, the download failed) it posts a
@@ -16,7 +16,7 @@ enum Updater {
     static let category = "update"
     private static let agent = SMAppService.agent(plistName: "dev.noky.lightbopomofo.update-check.plist")
     /// The background check asks at most this often…
-    private static let checkEvery: TimeInterval = 12 * 3600
+    private static let checkEvery: TimeInterval = 3600
     /// …and reminds of an update it already announced this often.
     private static let remindEvery: TimeInterval = 7 * 24 * 3600
 
@@ -37,7 +37,14 @@ enum Updater {
     static func scheduleChecks() {
         do {
             if autoCheck || WordSharing.enabled {
+                let defaults = UserDefaults.standard
+                let scheduleKey = "HourlyBackgroundSchedule"
+                // Reload the previous six-hour LaunchAgent once after upgrade.
+                if !defaults.bool(forKey: scheduleKey), agent.status == .enabled {
+                    try agent.unregister()
+                }
                 if agent.status != .enabled { try agent.register() }
+                if agent.status == .enabled { defaults.set(true, forKey: scheduleKey) }
             } else if agent.status != .notRegistered {
                 try agent.unregister()
             }
@@ -78,8 +85,8 @@ enum Updater {
     /// is waiting for the user, 20 updated, 1 the check failed. `force`
     /// (`--now`) skips the setting and the once-in-a-while limits.
     static func checkInBackground(force: Bool) async -> Int32 {
-        await updateInputMethodWhenQuiet()  // left waiting by an earlier update
         await WordSharing.shareIfDue(force: force)
+        await updateInputMethodWhenQuiet()  // left waiting by an earlier update
         let defaults = UserDefaults.standard
         let now = Date().timeIntervalSince1970
         if !force, !autoCheck || now < defaults.double(forKey: "LastUpdateCheck") + checkEvery {

@@ -32,9 +32,9 @@ struct GeneralView: View {
 
             HStack {
                 Toggle("自動更新", isOn: $model.autoCheck)
-                    .help("有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
+                    .help("每小時檢查，有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
                 Toggle("分享新詞", isOn: $model.shareWords)
-                    .help("把你選過、詞庫沒有的詞（連同打的注音和次數）傳給我們，審核後加進詞庫。不傳送前後文。裝置編號：\(WordSharing.deviceID)")
+                    .help("每小時把你選過、詞庫沒有的詞（連同打的注音和次數）傳給我們，審核後加進詞庫。不傳送前後文。裝置編號：\(WordSharing.deviceID)")
                 Spacer()
                 Button("打字教學") { tutorialDone = false }
                     .buttonStyle(.link)

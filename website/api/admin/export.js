@@ -11,5 +11,6 @@ export default handler(['GET'], async (req, res) => {
      GROUP BY s.text, s.typed
      ORDER BY s.text, uses DESC`,
   );
-  res.status(200).json({ words: rows });
+  const lexicon = await query('SELECT text, reading, frequency FROM lexicon_entries ORDER BY text, reading');
+  res.status(200).json({ words: rows, lexicon });
 });

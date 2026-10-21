@@ -18,6 +18,12 @@ const COOKIE = 'lb_admin';
 // ---------- Database ----------
 
 const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS device_syncs (
+     device text PRIMARY KEY, app text, last_synced_at timestamptz NOT NULL DEFAULT now())`,
+  `CREATE TABLE IF NOT EXISTS lexicon_entries (
+     text text NOT NULL, reading text NOT NULL, frequency integer NOT NULL DEFAULT 2000,
+     updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (text, reading))`,
+  `CREATE TABLE IF NOT EXISTS deleted_words (text text PRIMARY KEY)`,
   `CREATE TABLE IF NOT EXISTS submissions (
      device text NOT NULL,
      text text NOT NULL,

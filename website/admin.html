@@ -25,7 +25,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 button, input { font: inherit; color: inherit; }
-.wrap { max-width: 960px; margin: 0 auto; padding: 16px 16px 32px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 16px 16px 32px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 h1 { font-size: 18px; margin: 0; letter-spacing: .01em; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -77,6 +77,15 @@ tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 kbd { font: inherit; font-weight: 600; }
 .muted { color: var(--ink3); font-size: 14px; }
 
+details { margin: 12px 0; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+#dictionary-form label { display: grid; gap: 4px; }
+#dictionary-form input { padding: 7px; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; }
+#dictionary-reading { width: 250px; }
+#dictionary-frequency { width: 100px; }
+#dictionary-words { padding-left: 20px; }
+#dictionary-words li { margin: 8px 0; }
+#sync-devices { overflow-wrap: anywhere; font-size: 12px; color: var(--ink2); }
 @media (max-width: 640px) {
   thead { display: none; }
   tr { display: grid; grid-template-columns: 1fr auto; padding: 6px 2px; border-bottom: 1px solid var(--line); }
@@ -114,19 +123,34 @@ kbd { font: inherit; font-weight: 600; }
     </form>
     <div class="tabs" role="group" aria-label="狀態">
       <button type="button" data-status="pending" aria-pressed="true">待審<span class="n"></span></button>
-      <button type="button" data-status="approved" aria-pressed="false">已加入<span class="n"></span></button>
+      <button type="button" data-status="approved" aria-pressed="false">已核准<span class="n"></span></button>
       <button type="button" data-status="rejected" aria-pressed="false">不要<span class="n"></span></button>
     </div>
     </div>
     <div class="toolbar">
-      <p class="muted" id="shortcuts" title="使用英文輸入；已處理的詞只保留上一筆">↑↓ 選詞 · <kbd>A</kbd> 加入 · <kbd>D</kbd> 不要 · <kbd>U</kbd> 撤回</p>
+      <p class="muted" id="shortcuts" title="使用英文輸入；已處理的詞只保留上一筆">↑↓ 選詞 · <kbd>A</kbd> 核准 · <kbd>D</kbd> 不要 · <kbd>U</kbd> 撤回</p>
       <button class="btn plain" id="refresh" type="button">重整</button>
     </div>
 
+    <p id="sync-summary" class="muted">尚未收到同步資料</p>
+    <details><summary>最近同步的裝置（最多 20 台）</summary><ul id="sync-devices"></ul></details>
+    <details id="dictionary-panel">
+      <summary>正式詞庫：新增與刪除</summary>
+      <p class="muted">入庫後會隨下一版 App 的詞庫提供；不會立即套用到使用者電腦。</p>
+      <form id="dictionary-form" class="review-tools">
+        <label>詞 <input id="dictionary-text" required maxlength="40"></label>
+        <label>完整注音 <input id="dictionary-reading" required placeholder="ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ"></label>
+        <label>詞頻 <input id="dictionary-frequency" type="number" min="1" max="1000000" value="2000" required></label>
+        <button class="btn primary" id="dictionary-save" type="submit">加入詞庫</button>
+      </form>
+      <p id="dictionary-message" role="status" aria-live="polite"></p>
+      <button class="btn plain" id="dictionary-refresh" type="button">載入正式詞庫</button>
+      <ul id="dictionary-words"></ul>
+    </details>
     <p id="review-message" class="muted" role="status" aria-live="polite"></p>
     <div class="card">
       <table aria-describedby="shortcuts">
-        <thead><tr><th>詞</th><th>注音</th><th>裝置</th><th>次數</th><th></th></tr></thead>
+        <thead><tr><th>詞</th><th>注音</th><th>裝置</th><th>次數</th><th>最近收到</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>沒有詞</div>
@@ -237,14 +261,33 @@ kbd { font: inherit; font-weight: 600; }
     var act = entry.actions;
     act.textContent = '';
     if (entry.status === 'pending') {
-      act.appendChild(button('加入', 'ok', 'approved', entry));
+      act.appendChild(button('核准', 'ok', 'approved', entry));
       act.appendChild(button('不要', 'no', 'rejected', entry));
     } else {
       var label = document.createElement('span');
-      label.textContent = entry.status === 'approved' ? '已加入 ' : '不要 ';
+      label.textContent = entry.status === 'approved' ? '已核准 ' : '不要 ';
       act.appendChild(label);
       act.appendChild(button('撤回', 'plain', 'pending', entry));
     }
+    if (entry.status === 'approved') {
+      var add = document.createElement('button');
+      add.type = 'button'; add.className = 'btn'; add.textContent = '加入詞庫';
+      add.disabled = entry.saving || loading;
+      add.onclick = function (e) {
+        e.stopPropagation();
+        $('dictionary-panel').open = true;
+        $('dictionary-text').value = entry.word.text;
+        $('dictionary-reading').value = '';
+        $('dictionary-message').textContent = '請確認完整注音後加入詞庫。';
+        $('dictionary-reading').focus();
+      };
+      act.appendChild(add);
+    }
+    var remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'btn no'; remove.textContent = '刪除';
+    remove.disabled = entry.saving || loading;
+    remove.onclick = function (e) { e.stopPropagation(); deleteSubmission(entry); };
+    act.appendChild(remove);
     var state = document.createElement('span');
     state.className = 'save-state' + (entry.error ? ' failed' : '');
     state.setAttribute('role', entry.error ? 'alert' : 'status');
@@ -297,6 +340,13 @@ kbd { font: inherit; font-weight: 600; }
       if (request !== generation) return;
       show('review');
       counts = data.counts;
+      $('sync-summary').textContent = data.lastSyncedAt ? '最近成功同步：' + formatTime(data.lastSyncedAt) : '尚未收到同步資料';
+      $('sync-devices').textContent = '';
+      (data.syncs || []).forEach(function (sync) {
+        var item = document.createElement('li');
+        item.textContent = sync.device + ' · v' + sync.app + ' · ' + formatTime(sync.last_synced_at);
+        $('sync-devices').appendChild(item);
+      });
       loading = false;
       var rows = $('rows');
       rows.textContent = '';
@@ -307,6 +357,7 @@ kbd { font: inherit; font-weight: 600; }
         tr.appendChild(cell('typed', w.typed.join('、')));
         tr.appendChild(cell('num', w.devices));
         tr.appendChild(cell('num', w.uses));
+        tr.appendChild(cell('muted', formatTime(w.last_seen)));
 
         var act = cell('act', '');
         var entry = { word: w, status: w.status || requestedStatus, row: tr, actions: act };
@@ -333,6 +384,77 @@ kbd { font: inherit; font-weight: 600; }
       if (request === generation) { loading = false; updateControls(); }
     });
   }
+
+  function formatTime(value) {
+    if (!value) return '—';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-TW', { hour12: false });
+  }
+
+  function deleteSubmission(entry) {
+    if (loading || entry.saving || saving) return;
+    if (!window.confirm('刪除「' + entry.word.text + '」的上傳紀錄？之後同步不會重新加入待審；正式詞庫中的詞不受影響。')) return;
+    entry.saving = true; saving++;
+    renderActions(entry); updateControls();
+    api('/api/admin/words', { method: 'DELETE', body: JSON.stringify({ text: entry.word.text }) })
+      .then(function () {
+        counts[entry.status] = Math.max(0, (counts[entry.status] || 0) - 1);
+        entry.row.remove();
+        entries = entries.filter(function (e) { return e !== entry; });
+        select(entries.length ? 0 : -1, false);
+        $('empty').hidden = entries.length > 0;
+        $('review-message').textContent = '已刪除上傳紀錄。';
+      }).catch(function (error) {
+        $('review-message').textContent = '刪除失敗：' + error.message;
+      }).finally(function () { entry.saving = false; saving--; renderActions(entry); updateControls(); });
+  }
+
+  var dictionaryBusy = false;
+  function dictionaryControls(busy) {
+    dictionaryBusy = busy;
+    $('dictionary-form').querySelectorAll('input, button').forEach(function (el) { el.disabled = busy; });
+    $('dictionary-words').querySelectorAll('button').forEach(function (el) { el.disabled = busy; });
+    $('dictionary-refresh').disabled = busy;
+  }
+  function loadDictionary() {
+    return api('/api/admin/lexicon').then(function (data) {
+      $('dictionary-words').textContent = '';
+      data.words.forEach(function (word) {
+        var item = document.createElement('li');
+        var label = document.createElement('span');
+        label.textContent = word.text + ' · ' + word.reading + ' · 詞頻 ' + word.frequency + ' ';
+        item.appendChild(label);
+        var remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'btn no'; remove.textContent = '刪除詞庫項目';
+        remove.onclick = function () {
+          if (dictionaryBusy || !window.confirm('從正式詞庫刪除「' + word.text + '」（' + word.reading + '）？變更會隨下次詞庫發布生效。')) return;
+          dictionaryControls(true);
+          api('/api/admin/lexicon', { method: 'DELETE', body: JSON.stringify(word) })
+            .then(function () { item.remove(); $('dictionary-message').textContent = '已刪除，將於下次詞庫發布生效。'; })
+            .catch(function (error) { $('dictionary-message').textContent = '刪除失敗：' + error.message; })
+            .finally(function () { dictionaryControls(false); });
+        };
+        item.appendChild(remove); $('dictionary-words').appendChild(item);
+      });
+    });
+  }
+  $('dictionary-refresh').onclick = function () {
+    if (dictionaryBusy) return;
+    dictionaryControls(true);
+    loadDictionary().catch(function (error) { $('dictionary-message').textContent = '載入失敗：' + error.message; })
+      .finally(function () { dictionaryControls(false); });
+  };
+  $('dictionary-form').onsubmit = function (event) {
+    event.preventDefault();
+    if (dictionaryBusy) return;
+    var word = { text: $('dictionary-text').value.trim(), reading: $('dictionary-reading').value.trim(), frequency: Number($('dictionary-frequency').value) };
+    dictionaryControls(true);
+    api('/api/admin/lexicon', { method: 'POST', body: JSON.stringify(word) }).then(function () {
+      $('dictionary-message').textContent = '「' + word.text + '」已加入正式詞庫，將隨下一版 App 提供。';
+      return loadDictionary().catch(function () { $('dictionary-message').textContent += ' 清單更新失敗，請重新載入。'; });
+    }).catch(function (error) { $('dictionary-message').textContent = '加入失敗：' + error.message; })
+      .finally(function () { dictionaryControls(false); });
+  };
 
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.onclick = function () {

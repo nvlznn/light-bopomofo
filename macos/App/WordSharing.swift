@@ -1,7 +1,7 @@
 import Foundation
 
 /// 分享新詞: the words the user put together that the lexicon lacks (with the
-/// symbols typed and how often), sent about once a day by the background item
+/// symbols typed and how often), sent about once an hour by the background item
 /// under a random device ID, for review on lightbopomofo.noky.dev/admin.html.
 /// On unless turned off (the tutorial's last page, or 一般). See privacy.html.
 enum WordSharing {
@@ -12,7 +12,7 @@ enum WordSharing {
     }
     static let privacyURL = URL(string: "https://lightbopomofo.noky.dev/privacy.html")!
     /// At most this often…
-    private static let every: TimeInterval = 24 * 3600
+    private static let every: TimeInterval = 3600
     /// …and the most recent this many (the server takes no more).
     private static let maxWords = 500
 
@@ -47,7 +47,7 @@ enum WordSharing {
             .map { Word(text: $0.text, typed: $0.typed, count: max(1, $0.count)) }
     }
 
-    /// Send the new words if sharing is on and a day has passed (`force`:
+    /// Send the new words if sharing is on and an hour has passed (`force`:
     /// regardless of when). Failures wait for the next try.
     static func shareIfDue(force: Bool) async {
         let defaults = UserDefaults.standard
@@ -56,7 +56,8 @@ enum WordSharing {
         let lexicon = AppModel.bundledInputMethod.appendingPathComponent("Contents/Resources/lexicon.bin").path
         guard let engine = Engine(lexiconPath: lexicon, historyPath: UserData.historyPath) else { return }
         let words = words(from: engine.newWords())
-        if !words.isEmpty {
+        // Empty uploads still record a successful sync on the server.
+        do {
             struct Upload: Encodable {
                 let device: String
                 let app: String
