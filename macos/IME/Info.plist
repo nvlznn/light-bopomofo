@@ -85,6 +85,6 @@
 		<string>Han</string>
 	</array>
 	<key>tsInputMethodIconFileKey</key>
-	<string>switcher.tiff</string>
+	<string>icon.tiff</string>
 </dict>
 </plist>
