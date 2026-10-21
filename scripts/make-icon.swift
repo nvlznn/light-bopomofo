@@ -1,6 +1,6 @@
 // Draws the icons.
 //   swift scripts/make-icon.swift menu macos/IME/Resources/icon.tiff
-//       input-source icon: black glyph on transparent (template), 16 + 32 px
+//       input-source icon (template): glyph cut out of a rounded rectangle
 //   swift scripts/make-icon.swift app macos/App/Resources/AppIcon.icns
 //       app icon: white rounded square with a black glyph
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
@@ -33,26 +33,39 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
     text.draw(at: NSPoint(x: (box - s.width) / 2, y: (box - s.height) / 2 + dy))
 }
 
-/// The glyph cut out of a filled rounded square, like Apple's Chinese input
-/// sources (TCIM's cangjie.tiff, zhuyin.tiff), matched pixel for pixel:
-/// 16 pt square, 2.375 pt corners, the glyph's ink 11 pt across and centred.
+/// The glyph cut out of a filled rounded rectangle, as System Settings draws
+/// Apple's Chinese input sources (倉 拼 寫 雙), measured from a screenshot:
+/// 22 × 16 pt, 5 pt corners, the glyph at the size that makes 倉 9.5 pt
+/// tall, centred.
 func menuIcon(_ out: String) {
-    let font = NSFont.systemFont(ofSize: 100, weight: .medium)
-    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [.font: font]))
-    let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
-    let scale = 11 / max(ink.width, ink.height)
-    let image = NSImage(size: NSSize(width: 16, height: 16))
-    for px in [16, 32] {
-        image.addRepresentation(bitmap(px, points: 16) {
-            NSColor.black.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: 16, height: 16), xRadius: 2.375, yRadius: 2.375).fill()
-            let context = NSGraphicsContext.current!.cgContext
-            context.setBlendMode(.destinationOut)
-            context.translateBy(x: 8 - ink.midX * scale, y: 8 - ink.midY * scale)
-            context.scaleBy(x: scale, y: scale)
-            context.textPosition = .zero
-            CTLineDraw(line, context)
-        })
+    func line(_ text: String) -> CTLine {
+        CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 100, weight: .medium),
+        ]))
+    }
+    let scale = 9.5 / CTLineGetBoundsWithOptions(line("倉"), .useGlyphPathBounds).height
+    let glyph = line("輕")
+    let ink = CTLineGetBoundsWithOptions(glyph, .useGlyphPathBounds)
+    let size = NSSize(width: 22, height: 16)
+    let image = NSImage(size: size)
+    for factor in [1, 2] {
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 22 * factor, pixelsHigh: 16 * factor, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0)!
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.black.setFill()
+        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 5, yRadius: 5).fill()
+        let context = NSGraphicsContext.current!.cgContext
+        context.setBlendMode(.destinationOut)
+        context.translateBy(x: size.width / 2 - ink.midX * scale, y: size.height / 2 - ink.midY * scale)
+        context.scaleBy(x: scale, y: scale)
+        context.textPosition = .zero
+        CTLineDraw(glyph, context)
+        NSGraphicsContext.restoreGraphicsState()
+        image.addRepresentation(rep)
     }
     try! image.tiffRepresentation(using: .lzw, factor: 1)!.write(to: URL(fileURLWithPath: out))
 }
