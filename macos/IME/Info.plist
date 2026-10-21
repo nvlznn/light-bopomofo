@@ -24,6 +24,8 @@
 		<dict>
 			<key>dev.noky.inputmethod.lightbopomofo.Bopomofo</key>
 			<dict>
+				<key>TISIconIsTemplate</key>
+				<true/>
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
