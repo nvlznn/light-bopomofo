@@ -1,6 +1,6 @@
 // Draws the icons.
 //   swift scripts/make-icon.swift menu macos/IME/Resources/icon.tiff
-//       input-source icon (template): the glyph alone
+//       input-source icon (template): the glyph in an outlined rounded rectangle
 //   swift scripts/make-icon.swift app macos/App/Resources/AppIcon.icns
 //       app icon: white rounded square with a black glyph
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
@@ -33,11 +33,10 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
     text.draw(at: NSPoint(x: (box - s.width) / 2, y: (box - s.height) / 2 + dy))
 }
 
-/// The glyph alone, sized like the 倉 System Settings draws for Apple's
-/// Chinese input sources (measured from a screenshot): 22 × 16 pt, the
-/// glyph's ink 11.25 × 10 pt, centred. No badge: Settings, the menu bar and
-/// the input switcher all draw this one image, and the switcher shows
-/// Apple's sources without one.
+/// The glyph in an outlined rounded rectangle, like Apple's 注 in the menu
+/// bar (measured from a screenshot): 22 × 16 pt, a 1 pt line with 5.75 pt
+/// outer corners, the glyph's ink 11.25 × 10 pt, centred. Settings, the menu
+/// bar and the input switcher all draw this one image.
 func menuIcon(_ out: String) {
     let glyph = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [
         .font: NSFont.systemFont(ofSize: 100, weight: .medium),
@@ -54,6 +53,11 @@ func menuIcon(_ out: String) {
         rep.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.black.setStroke()
+        let frame = NSBezierPath(roundedRect: NSRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5),
+                                 xRadius: 5.25, yRadius: 5.25)
+        frame.lineWidth = 1
+        frame.stroke()
         let context = NSGraphicsContext.current!.cgContext
         context.translateBy(x: size.width / 2 - ink.midX * scaleX, y: size.height / 2 - ink.midY * scaleY)
         context.scaleBy(x: scaleX, y: scaleY)
