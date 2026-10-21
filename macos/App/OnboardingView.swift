@@ -681,8 +681,8 @@ private struct AddStep: View {
 
     private static let steps = [
         "打開「系統設定」→「鍵盤」，按「輸入方式」旁的「編輯…」",
-        "按左下角「＋」，左邊選「中文（繁體）」",
-        "選「輕注音」，按「加入」",
+        "按左下角「＋」",
+        "左邊選「繁體中文」，右邊選「輕注音」，按「加入」",
     ]
     private static let images = (1...3).map {
         Bundle.main.url(forResource: "setup-\($0)", withExtension: "png").flatMap(NSImage.init(contentsOf:))
