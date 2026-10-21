@@ -1,6 +1,6 @@
 // Draws the icons.
 //   swift scripts/make-icon.swift menu macos/IME/Resources/icon.tiff
-//       input-source icon (template): glyph cut out of a rounded rectangle
+//       input-source icon (template): the glyph alone
 //   swift scripts/make-icon.swift app macos/App/Resources/AppIcon.icns
 //       app icon: white rounded square with a black glyph
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
@@ -33,10 +33,11 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
     text.draw(at: NSPoint(x: (box - s.width) / 2, y: (box - s.height) / 2 + dy))
 }
 
-/// The glyph cut out of a filled rounded rectangle, as System Settings draws
-/// Apple's Chinese input sources (倉 拼 寫 雙), measured from a screenshot:
-/// 22 × 16 pt, 5 pt corners, the glyph's ink 11.25 × 10 pt (as wide and
-/// tall as 倉's), centred.
+/// The glyph alone, sized like the 倉 System Settings draws for Apple's
+/// Chinese input sources (measured from a screenshot): 22 × 16 pt, the
+/// glyph's ink 11.25 × 10 pt, centred. No badge: Settings, the menu bar and
+/// the input switcher all draw this one image, and the switcher shows
+/// Apple's sources without one.
 func menuIcon(_ out: String) {
     let glyph = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [
         .font: NSFont.systemFont(ofSize: 100, weight: .medium),
@@ -53,10 +54,7 @@ func menuIcon(_ out: String) {
         rep.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSColor.black.setFill()
-        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 5, yRadius: 5).fill()
         let context = NSGraphicsContext.current!.cgContext
-        context.setBlendMode(.destinationOut)
         context.translateBy(x: size.width / 2 - ink.midX * scaleX, y: size.height / 2 - ink.midY * scaleY)
         context.scaleBy(x: scaleX, y: scaleY)
         context.textPosition = .zero
