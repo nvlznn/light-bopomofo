@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "build-lexicon"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "lightbopomofo-core",
 ]
@@ -75,28 +75,28 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "lightbopomofo-cli"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "lightbopomofo-core",
 ]
 
 [[package]]
 name = "lightbopomofo-core"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "memmap2",
 ]
 
 [[package]]
 name = "lightbopomofo-ffi"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "lightbopomofo-core",
 ]
 
 [[package]]
 name = "lightbopomofo-settings"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "embed-resource",
  "lightbopomofo-core",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "lightbopomofo-windows"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "lightbopomofo-core",
  "windows",
