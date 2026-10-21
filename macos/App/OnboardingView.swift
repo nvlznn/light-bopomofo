@@ -46,11 +46,12 @@ struct OnboardingView: View {
         }
         .ignoresSafeArea()
         .frame(minWidth: 760, minHeight: 720)
-        .background(KeyCatcher { event in
-            if tutor.isFinal {
-                if event.keyCode == 36 || event.keyCode == 76 { onFinish() }
-            } else {
+        // Keys go to the lessons; the try-out has a real text field instead.
+        .background(KeyCatcher(active: !tutor.isTryStep) { event in
+            if tutor.practice != nil {
                 tutor.handle(event)
+            } else if tutor.isAddStep, event.keyCode == 36 || event.keyCode == 76 {
+                tutor.go(to: tutor.step + 1)
             }
         })
         .background(TransparentTitleBar())
@@ -62,14 +63,16 @@ struct OnboardingView: View {
 
 @MainActor
 private final class Tutor: ObservableObject {
-    /// The lessons, then the page about switching to 輕注音.
-    static let stepCount = Lesson.tutorial.count + 1
+    /// The lessons, then adding 輕注音 in System Settings, then typing with it.
+    static let stepCount = Lesson.tutorial.count + 2
 
     @Published private(set) var step = 0
     /// +1 going forward, -1 going back (for the transition).
     @Published private(set) var direction = 1
     /// Bumped after every key, to redraw the practice.
     @Published private(set) var revision = 0
+    /// Typed 你好嗎 with 輕注音 on the try-out page.
+    @Published var triedOut = false
     private(set) var practice: Practice?
     private var engine: Engine?
 
@@ -81,7 +84,8 @@ private final class Tutor: ObservableObject {
         start()
     }
 
-    var isFinal: Bool { step == Tutor.stepCount - 1 }
+    var isAddStep: Bool { step == Lesson.tutorial.count }
+    var isTryStep: Bool { step == Lesson.tutorial.count + 1 }
 
     func go(to newStep: Int) {
         guard (0..<Tutor.stepCount).contains(newStep), newStep != step else { return }
@@ -105,8 +109,8 @@ private final class Tutor: ObservableObject {
             engine = Engine(lexiconPath: Tutor.lexiconPath, historyPath: nil)
         }
         guard let engine else {
-            // No lexicon to practise with: only the last page makes sense.
-            step = Tutor.stepCount - 1
+            // No lexicon to practise with: on to adding 輕注音.
+            step = Lesson.tutorial.count
             practice = nil
             return
         }
@@ -178,6 +182,7 @@ private struct Backdrop: View {
 
 private struct Card: View {
     @ObservedObject var tutor: Tutor
+    @EnvironmentObject private var model: AppModel
     var onFinish: () -> Void
 
     var body: some View {
@@ -186,8 +191,10 @@ private struct Card: View {
             Group {
                 if let practice = tutor.practice {
                     PracticeStep(step: tutor.step, practice: practice, revision: tutor.revision)
+                } else if tutor.isAddStep {
+                    AddStep()
                 } else {
-                    FinalStep()
+                    TryStep(tutor: tutor, onFinish: onFinish)
                 }
             }
             .id(tutor.step)
@@ -196,17 +203,29 @@ private struct Card: View {
                 removal: .offset(x: -24 * CGFloat(tutor.direction)).combined(with: .opacity)))
             .frame(maxHeight: .infinity, alignment: .top)
 
-            ContinueButton(
-                title: tutor.isFinal ? "開始使用" : "繼續",
-                ready: tutor.practice?.isDone ?? true
-            ) {
-                tutor.isFinal ? onFinish() : tutor.go(to: tutor.step + 1)
+            ContinueButton(title: tutor.isTryStep ? "開始使用" : "繼續", ready: ready) {
+                if tutor.isTryStep { onFinish() } else { tutor.go(to: tutor.step + 1) }
+            }
+            .disabled(tutor.practice == nil && !ready)
+            if tutor.practice == nil {
+                Button("稍後再設定", action: onFinish)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
             }
         }
         .padding(.horizontal, 30)
         .padding(.top, 26)
         .padding(.bottom, 30)
         .foregroundStyle(.white)
+    }
+
+    private var ready: Bool {
+        if let practice = tutor.practice { return practice.isDone }
+        if tutor.isAddStep { return model.status.isReady }
+        return tutor.triedOut
     }
 }
 
@@ -654,94 +673,138 @@ private struct Keycap: View {
 
 // MARK: - Switching to 輕注音
 
-private struct FinalStep: View {
+/// Adding 輕注音 in System Settings, with a screenshot per step; ticks as
+/// soon as it is there.
+private struct AddStep: View {
     @EnvironmentObject private var model: AppModel
+    @State private var shown = 0
+
+    private static let steps = [
+        "打開「系統設定」→「鍵盤」，按「輸入方式」旁的「編輯…」",
+        "按左下角「＋」，左邊選「中文（繁體）」",
+        "選「輕注音」，按「加入」",
+    ]
+    private static let images = (1...3).map {
+        Bundle.main.url(forResource: "setup-\($0)", withExtension: "png").flatMap(NSImage.init(contentsOf:))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Title(text: "開始打字吧", chip: "輕")
+            Title(text: "加入輕注音", chip: "設定")
                 .padding(.top, 34)
-            Subtitle(text: needsSetup
-                ? "輸入法還沒自動加進去，照下面三步自己加一次，之後就能用了。"
-                : "在選單列切換到「輕注音」，任何 App 都能這樣打。")
-                .padding(.top, 12)
-            if needsSetup {
-                AddSteps()
-                    .padding(.top, 22)
-            } else {
-                VStack(spacing: 10) {
-                    Option(icon: "A", title: "ABC", selected: false)
-                    Option(icon: "輕", title: "輕注音", selected: true)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(AddStep.steps.enumerated()), id: \.offset) { index, text in
+                    Button { shown = index } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                                .foregroundStyle(.black)
+                                .frame(width: 20, height: 20)
+                                .background(Circle().fill(index == shown ? Palette.cream : .white.opacity(0.5)))
+                            Text(text)
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white.opacity(index == shown ? 0.95 : 0.6))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.top, 28)
+            }
+            .padding(.top, 16)
+            if let image = AddStep.images[shown] {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 190)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.top, 14)
+                    .id(shown)
+                    .transition(.opacity)
             }
             HStack(spacing: 8) {
-                Image(systemName: needsSetup ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                Text(needsSetup ? "輕注音還沒出現在你的輸入方式裡" : "輕注音已加入你的輸入方式")
+                Image(systemName: model.status.isReady ? "checkmark.circle.fill" : "circle.dotted")
+                Text(model.status.isReady ? "已加入" : "還沒加入")
+                Spacer()
+                Button("打開設定") { model.openInputSourceSettings() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .padding(.horizontal, 14)
+                    .frame(height: 30)
+                    .background(Capsule().fill(.white.opacity(0.14)))
             }
             .font(.system(size: 13.5, weight: .semibold))
-            .foregroundStyle(needsSetup ? Color.orange : Palette.cream)
-            .padding(.top, 16)
-            if needsSetup {
-                Button { model.openInputSourceSettings() } label: {
-                    Text("打開輸入方式設定")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(Capsule().fill(.white.opacity(0.12)))
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 1))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 18)
-            }
-            ShareWordsBox()
-                .padding(.top, 22)
+            .foregroundStyle(model.status.isReady ? Palette.cream : .white.opacity(0.75))
+            .padding(.top, 14)
         }
-        // Look again every second until it is there (e.g. after adding it in
-        // System Settings), without waiting for the window to be activated.
+        // Look again every second; the screenshots go round until it is added.
         .task {
-            while needsSetup, !Task.isCancelled {
+            while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 model.refreshStatus()
+                if !model.status.isReady, Int(Date().timeIntervalSince1970) % 3 == 0 {
+                    withAnimation(.easeOut(duration: 0.3)) { shown = (shown + 1) % AddStep.steps.count }
+                }
             }
-        }
-    }
-
-    private var needsSetup: Bool {
-        switch model.status {
-        case .notEnabled, .notInstalled, .failed: return true
-        default: return false
         }
     }
 }
 
-/// How to add 輕注音 to the input sources by hand, for when the system did
-/// not take it in by itself.
-private struct AddSteps: View {
-    private static let steps = [
-        "打開「系統設定」→「鍵盤」，在「文字輸入」按「輸入方式」旁的「編輯…」",
-        "按左下角的「＋」，在左邊選「中文（繁體）」",
-        "選「輕注音」，按「加入」",
-    ]
+/// Typing 你好嗎 with 輕注音 in a real text field: proof it can be switched to
+/// and works. Then 開始使用.
+private struct TryStep: View {
+    @ObservedObject var tutor: Tutor
+    var onFinish: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @State private var text = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(AddSteps.steps.enumerated()), id: \.offset) { index, text in
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("\(index + 1)")
-                        .font(.system(size: 13, weight: .bold).monospacedDigit())
-                        .foregroundStyle(.black)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(Palette.cream))
-                    Text(text)
-                        .font(.system(size: 14.5))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 0) {
+            Title(text: "試打一次", chip: "ㄋㄏㄇ")
+                .padding(.top, 34)
+            Subtitle(text: "在選單列切到「輕注音」（或按 Control + 空白鍵），打 ㄋㄏㄇ 送出「你好嗎」。")
+                .padding(.top, 12)
+            HStack {
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 28, weight: .medium))
+                    .focused($focused)
+                    .onSubmit { if tutor.triedOut { onFinish() } }
+                if tutor.triedOut {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Palette.cream)
                 }
             }
+            .padding(.horizontal, 20)
+            .frame(height: 74)
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(tutor.triedOut ? Palette.cream.opacity(0.55) : .white.opacity(0.12), lineWidth: 1)
+            }
+            .padding(.top, 24)
+            Subtitle(text: hint)
+                .padding(.top, 12)
+            ShareWordsBox()
+                .padding(.top, 22)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { focused = true }
+        .onChange(of: text) { new in
+            if new.contains("你好嗎"), model.inputMethodSelected {
+                withAnimation { tutor.triedOut = true }
+            }
+        }
+    }
+
+    private var hint: String {
+        if tutor.triedOut { return "成功了，可以開始用輕注音打字。" }
+        if !text.isEmpty, text.unicodeScalars.contains(where: { $0.isASCII }) {
+            return "打出來是英文：先切到「輕注音」再打。"
+        }
+        return "選單裡找不到輕注音？到設定刪掉再重新加入。"
     }
 }
 
@@ -810,6 +873,8 @@ private struct Option: View {
 /// Receives the keys while the tutorial is shown. A plain view is no text
 /// input client, so input methods leave its keys alone.
 private struct KeyCatcher: NSViewRepresentable {
+    /// Whether it takes the keys (keeps the focus).
+    var active = true
     let onKey: (NSEvent) -> Void
 
     final class View: NSView {
@@ -833,7 +898,7 @@ private struct KeyCatcher: NSViewRepresentable {
 
     func updateNSView(_ view: View, context: Context) {
         view.onKey = onKey
-        if let window = view.window, window.firstResponder !== view {
+        if active, let window = view.window, window.firstResponder !== view {
             window.makeFirstResponder(view)
         }
     }

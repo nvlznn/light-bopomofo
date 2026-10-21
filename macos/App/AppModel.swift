@@ -12,6 +12,14 @@ final class AppModel: ObservableObject {
         case newerInstalled(installed: String, bundled: String)
         case notInstalled
         case failed(String)
+
+        /// In the user's input sources (or a newer one is).
+        var isReady: Bool {
+            switch self {
+            case .ready, .newerInstalled: return true
+            default: return false
+            }
+        }
     }
 
     enum Update: Equatable {
@@ -76,7 +84,6 @@ final class AppModel: ObservableObject {
             install()
         } else {
             refreshStatus()
-            ensureEnabled()  // e.g. removed from the input sources since
         }
         reloadHistory()
         Updater.scheduleChecks()
@@ -140,23 +147,13 @@ final class AppModel: ObservableObject {
         do {
             try installer.install()
             refreshStatus()
-            ensureEnabled()
         } catch {
             status = .failed(error.localizedDescription)
         }
     }
 
-    /// Whatever the system said at install, make sure 輕注音 ends up among the
-    /// user's input sources: look again, registering and enabling it each
-    /// time, for a few seconds; the status follows. When it still does not
-    /// appear, the status says so and the tutorial and 一般 show how to add it.
-    func ensureEnabled() {
-        guard !installer.isEnabled else { return }
-        Task {
-            await installer.ensureEnabled()
-            refreshStatus()
-        }
-    }
+    /// Whether 輕注音 is the input source in use now (the tutorial's try-out).
+    var inputMethodSelected: Bool { installer.isSelected }
 
     func uninstall() {
         do {

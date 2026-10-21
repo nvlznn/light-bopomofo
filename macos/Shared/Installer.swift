@@ -56,7 +56,7 @@ struct Installer {
     var sourceVersion: String { Installer.version(of: source) ?? "0" }
 
     /// Copy the source bundle into place (replacing any existing copy), then
-    /// register and enable it.
+    /// register it (the user adds it to the input sources).
     func install() throws {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -100,29 +100,22 @@ struct Installer {
         }
     }
 
-    /// Make the system list the input method as selectable and enabled,
-    /// registering again (and enabling) until it does or `attempts` run out,
-    /// since the system can take a moment to notice a bundle just copied in.
-    /// Returns whether it is in the user's input sources now.
-    @discardableResult
-    func ensureEnabled(attempts: Int = 8, wait: TimeInterval = 0.4) async -> Bool {
-        guard touchesSystem else { return true }
-        for attempt in 0..<attempts {
-            if isEnabled { return true }
-            if attempt > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1e9)) }
-            try? register()
-        }
-        return isEnabled
-    }
-
     // MARK: - System
 
+    /// Register only: the user adds it in System Settings (the tutorial shows
+    /// how). Enabling it from here left it listed but impossible to switch
+    /// to until removed and added again.
     private func register() throws {
         let status = TISRegisterInputSource(destination as CFURL)
         guard status == noErr else { throw InstallError.register(status) }
-        let sources = inputSources()
-        guard !sources.isEmpty else { throw InstallError.notFound }
-        for source in sources { TISEnableInputSource(source) }
+        guard !inputSources().isEmpty else { throw InstallError.notFound }
+    }
+
+    /// Whether 輕注音 is the input source in use now.
+    var isSelected: Bool {
+        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        guard let raw = TISGetInputSourceProperty(current, kTISPropertyBundleID) else { return false }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String == bundleID
     }
 
     private func inputSources() -> [TISInputSource] {
