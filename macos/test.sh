@@ -17,3 +17,8 @@ swiftc -import-objc-header "$HEADER" -L "$ROOT/target/release" -llightbopomofo_f
 cargo build --release -p build-lexicon --manifest-path "$ROOT/Cargo.toml"
 "$ROOT/target/release/build-lexicon" "$ROOT/data/tsi.csv" "$OUT-lexicon.bin"
 "$OUT" "$OUT-lexicon.bin"
+
+# Service lifecycle tests use a fake OS boundary; they never register a real job.
+swiftc -parse-as-library "$ROOT/macos/App/BackgroundRegistration.swift" \
+    "$ROOT/macos/Tests/BackgroundService/main.swift" -o "$OUT-background"
+"$OUT-background"

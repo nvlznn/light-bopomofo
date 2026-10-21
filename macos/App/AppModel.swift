@@ -46,6 +46,21 @@ final class AppModel: ObservableObject {
             Updater.scheduleChecks()
         }
     }
+    @Published private(set) var repairingBackground = false
+    @Published private(set) var backgroundRepairMessage: String?
+
+    func repairBackgroundService() async {
+        guard !repairingBackground else { return }
+        repairingBackground = true
+        backgroundRepairMessage = nil
+        defer { repairingBackground = false }
+        do {
+            try await Updater.refreshRegistration(force: true)
+            backgroundRepairMessage = autoCheck || shareWords
+                ? "已重新登記背景服務。" : "背景服務已停用；開啟自動更新或分享新詞時會重新登記。"
+        } catch { backgroundRepairMessage = error.localizedDescription }
+    }
+
     @Published private(set) var entries: [HistoryEntry] = []
     @Published var historyError: String?
 

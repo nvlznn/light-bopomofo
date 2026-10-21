@@ -8,6 +8,14 @@ import Foundation
 enum Main {
     static func main() {
         let arguments = CommandLine.arguments
+        if let i = arguments.firstIndex(of: "--refresh-background-service") {
+            guard arguments.indices.contains(i + 1), let pid = Int32(arguments[i + 1]), pid > 1 else { exit(1) }
+            Task { @MainActor in
+                do { try await Updater.finishRegistration(after: pid); exit(0) }
+                catch { NSLog("輕注音: background registration: \(error.localizedDescription)"); exit(1) }
+            }
+            dispatchMain()
+        }
         if let i = arguments.firstIndex(of: "--check-update") {
             let force = arguments.dropFirst(i + 1).first == "--now"
             Task {
@@ -25,6 +33,7 @@ enum Main {
                         exit(0)
                     }
                     try await Updater.install(version)
+                    try await Updater.handOffRegistration()
                     print("updated to \(version)")
                     exit(0)
                 } catch {

@@ -1,5 +1,6 @@
 import AppKit
 import Security
+import CryptoKit
 import ServiceManagement
 import UserNotifications
 
@@ -14,7 +15,7 @@ import UserNotifications
 enum Updater {
     static let teamID = "6KB6SVY565"
     static let category = "update"
-    private static let agent = SMAppService.agent(plistName: "dev.noky.lightbopomofo.update-check.plist")
+    private static let agent = SMAppService.agent(plistName: "dev.noky.lightbopomofo.background-service.plist")
     /// The background check asks at most this often…
     private static let checkEvery: TimeInterval = 3600
     /// …and reminds of an update it already announced this often.
@@ -32,25 +33,84 @@ enum Updater {
         set { UserDefaults.standard.set(newValue, forKey: "CheckForUpdates") }
     }
 
-    /// Register the background item while it has work (updates or 分享新詞),
-    /// remove it otherwise.
-    static func scheduleChecks() {
-        do {
-            if autoCheck || WordSharing.enabled {
-                let defaults = UserDefaults.standard
-                let scheduleKey = "HourlyBackgroundSchedule"
-                // Reload the previous six-hour LaunchAgent once after upgrade.
-                if !defaults.bool(forKey: scheduleKey), agent.status == .enabled {
-                    try agent.unregister()
-                }
-                if agent.status != .enabled { try agent.register() }
-                if agent.status == .enabled { defaults.set(true, forKey: scheduleKey) }
-            } else if agent.status != .notRegistered {
-                try agent.unregister()
-            }
-        } catch {
-            NSLog("輕注音: background update check: \(error)")
+    private static let legacyAgent = SMAppService.agent(plistName: "dev.noky.lightbopomofo.update-check.plist")
+    @MainActor private static var legacyMigration: Task<Void, Error>?
+
+    @MainActor
+    private static func removeLegacyRegistration() async throws {
+        if let migration = legacyMigration { return try await migration.value }
+        let migration = Task { @MainActor in
+            // Preserve a refusal of background execution across the migration.
+            if legacyAgent.status == .requiresApproval { throw RegistrationError.approval }
+            if legacyAgent.status == .enabled { try await legacyAgent.unregister() }
         }
+        legacyMigration = migration
+        do { try await migration.value }
+        catch { legacyMigration = nil; throw error }
+    }
+
+    @MainActor private static let registration = BackgroundRegistration(
+        defaults: .standard, status: { agent.status },
+        unregister: { try await agent.unregister() }, register: { try agent.register() }
+    )
+
+    /// Development copies must never replace the installed app's registration.
+    /// Hash the executable as well as the plist: rebuilding the same version also
+    /// changes the code that ServiceManagement must authorize.
+    private static func registrationRevision() throws -> String {
+        let app = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath()
+        let directories = [URL(fileURLWithPath: "/Applications"),
+                           FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
+        guard directories.contains(app.deletingLastPathComponent()),
+              let executable = Bundle.main.executableURL else { throw RegistrationError.developmentCopy }
+        do { try verify(app) } catch { throw RegistrationError.developmentCopy }
+        let plist = app.appendingPathComponent("Contents/Library/LaunchAgents/dev.noky.lightbopomofo.background-service.plist")
+        var hash = SHA256()
+        hash.update(data: try Data(contentsOf: executable, options: .mappedIfSafe))
+        hash.update(data: try Data(contentsOf: plist))
+        return "1:" + hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    @MainActor
+    static func refreshRegistration(force: Bool = false) async throws {
+        let revision = try registrationRevision()
+        try await removeLegacyRegistration()
+        try await registration.reconcile(enabled: autoCheck || WordSharing.enabled,
+                                         revision: revision, force: force)
+    }
+
+    @MainActor
+    static func scheduleChecks() {
+        Task {
+            do { try await refreshRegistration() }
+            catch { NSLog("輕注音: background registration: \(error.localizedDescription)") }
+        }
+    }
+
+    /// Launch Services gives the new app its own lifecycle, so unregistering
+    /// the old background job cannot kill the process doing the repair.
+    @MainActor
+    static func handOffRegistration() async throws {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.activates = false
+        configuration.arguments = ["--refresh-background-service", String(ProcessInfo.processInfo.processIdentifier)]
+        _ = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration)
+    }
+
+    @MainActor
+    static func finishRegistration(after pid: Int32) async throws {
+        // The updating process must finish using the old executable before its
+        // launchd registration is removed. Never unregister our own job.
+        guard ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != "dev.noky.lightbopomofo.background-service" else {
+            throw RegistrationError.handoffTimeout
+        }
+        let deadline = Date().addingTimeInterval(60)
+        while kill(pid, 0) == 0 {
+            guard Date() < deadline else { throw RegistrationError.handoffTimeout }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        try await refreshRegistration()
     }
 
     // MARK: Notification
@@ -104,6 +164,8 @@ enum Updater {
                     PendingUpdate.record(nil)
                     await updateInputMethodWhenQuiet()
                     await notifyInstalled(version)
+                    do { try await handOffRegistration() }
+                    catch { NSLog("輕注音: background registration handoff: \(error.localizedDescription)") }
                     return 20
                 } catch {
                     NSLog("輕注音: background update to \(version): \(error)")

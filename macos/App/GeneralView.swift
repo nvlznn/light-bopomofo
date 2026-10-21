@@ -31,6 +31,16 @@ struct GeneralView: View {
             Spacer()
 
             HStack {
+                Button("修復背景服務") { Task { await model.repairBackgroundService() } }
+                    .disabled(model.repairingBackground)
+                    .help("重新登記自動更新與分享新詞的背景工作。")
+                if model.repairingBackground { ProgressView().controlSize(.small) }
+                if let message = model.backgroundRepairMessage {
+                    Text(message).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
                 Toggle("自動更新", isOn: $model.autoCheck)
                     .help("每小時檢查，有新版本時在背景下載並安裝，完成後通知你。只向 GitHub 查詢版本，不傳送任何資料。")
                 Toggle("分享新詞", isOn: $model.shareWords)

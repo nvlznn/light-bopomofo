@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   windows-installer:
-    if: vars.WINDOWS_RELEASE == 'true'
+    if: vars.WINDOWS_RELEASE == 'true' && !contains(github.event.release.body, '<!-- macos-only -->')
     runs-on: windows-latest
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}

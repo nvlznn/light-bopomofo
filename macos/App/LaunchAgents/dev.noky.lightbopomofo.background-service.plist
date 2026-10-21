@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Registered by the app (Updater.scheduleChecks): checks for a newer
+	     release and shares new words at login and every hour. -->
+	<key>Label</key>
+	<string>dev.noky.lightbopomofo.background-service</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/LightBopomofo</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>LightBopomofo</string>
+		<string>--check-update</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<string>dev.noky.lightbopomofo</string>
+</dict>
+</plist>
