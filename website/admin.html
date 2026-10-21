@@ -77,6 +77,9 @@ tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 kbd { font: inherit; font-weight: 600; }
 .muted { color: var(--ink3); font-size: 14px; }
 
+#bulk-tools { margin: 12px 0; }
+#bulk-dictionary-form { padding: 12px; background: var(--card); margin-bottom: 12px; }
+#bulk-dictionary-rows input { padding: 6px; width: min(100%, 300px); }
 details { margin: 12px 0; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
 summary { cursor: pointer; font-weight: 600; }
 #dictionary-form label { display: grid; gap: 4px; }
@@ -141,16 +144,32 @@ summary { cursor: pointer; font-weight: 600; }
         <label>詞 <input id="dictionary-text" required maxlength="40"></label>
         <label>完整注音 <input id="dictionary-reading" required placeholder="ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ"></label>
         <label>詞頻 <input id="dictionary-frequency" type="number" min="1" max="1000000" value="2000" required></label>
-        <button class="btn primary" id="dictionary-save" type="submit">加入詞庫</button>
+        <button class="btn" id="dictionary-lookup" type="button">查詢詞是否存在</button>
+        <button disabled class="btn primary" id="dictionary-save" type="submit">加入詞庫</button>
       </form>
       <p id="dictionary-message" role="status" aria-live="polite"></p>
       <button class="btn plain" id="dictionary-refresh" type="button">載入正式詞庫</button>
+      <div class="review-tools"><label><input type="checkbox" id="dictionary-select-all">全選已載入詞庫項目</label><button type="button" class="btn no" id="dictionary-delete-selected" disabled>刪除勾選項目</button></div>
       <ul id="dictionary-words"></ul>
     </details>
     <p id="review-message" class="muted" role="status" aria-live="polite"></p>
+    <div class="review-tools" id="bulk-tools">
+      <label><input type="checkbox" id="select-all">全選目前清單</label><span id="selected-count">已選 0 個詞</span>
+      <button type="button" class="btn ok bulk-action" data-action="approved">批次核准</button>
+      <button type="button" class="btn bulk-action" data-action="rejected">批次排除</button>
+      <button type="button" class="btn bulk-action" data-action="pending">批次撤回</button>
+      <button type="button" class="btn no bulk-action" data-action="delete">批次刪除紀錄</button>
+      <button type="button" class="btn bulk-action" data-action="prepare">查詢並批次入庫</button>
+    </div>
+    <form id="bulk-dictionary-form" hidden>
+      <p>已存在的詞不能重複加入。請確認查無結果的詞與完整注音，再一次加入。</p>
+      <div id="bulk-dictionary-rows"></div>
+      <button type="submit" class="btn primary" id="bulk-dictionary-save">加入查無結果的詞</button>
+      <p id="bulk-dictionary-message" role="status"></p>
+    </form>
     <div class="card">
       <table aria-describedby="shortcuts">
-        <thead><tr><th>詞</th><th>注音</th><th>裝置</th><th>次數</th><th>最近收到</th><th></th></tr></thead>
+        <thead><tr><th>勾選</th><th>詞</th><th>注音</th><th>裝置</th><th>次數</th><th>最近收到</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>沒有詞</div>
@@ -198,6 +217,8 @@ summary { cursor: pointer; font-weight: 600; }
   var saving = 0;
   var generation = 0;
   var decisionOrder = 0;
+  var bulkBusy = false;
+  var queuedWords = [];
 
   function lastReviewed() {
     return entries.reduce(function (last, entry) {
@@ -226,6 +247,18 @@ summary { cursor: pointer; font-weight: 600; }
     $('logout').disabled = saving > 0;
     $('min-uses').disabled = saving > 0;
     $('apply-filter').disabled = saving > 0;
+    var visible = entries.filter(function (e) { return !e.row.hidden && e.status === status; });
+    var chosen = selectedEntries();
+    $('selected-count').textContent = '已選 ' + chosen.length + ' 個詞';
+    $('select-all').disabled = loading || saving > 0 || !visible.length;
+    $('select-all').checked = !!visible.length && chosen.length === visible.length;
+    $('select-all').indeterminate = chosen.length > 0 && chosen.length < visible.length;
+    entries.forEach(function (e) { e.check.disabled = loading || saving > 0; });
+    document.querySelectorAll('.bulk-action').forEach(function (b) {
+      b.disabled = loading || saving > 0 || !chosen.length || (b.dataset.action === 'prepare' && chosen.some(function (e) { return e.status !== 'approved'; }));
+    });
+    $('bulk-dictionary-form').querySelectorAll('input, button').forEach(function (el) { el.disabled = bulkBusy; });
+    $('bulk-dictionary-save').disabled = bulkBusy || !queuedWords.length;
   }
 
   function select(index, focus) {
@@ -249,7 +282,7 @@ summary { cursor: pointer; font-weight: 600; }
     b.type = 'button';
     b.className = 'btn ' + cls;
     b.textContent = label;
-    b.disabled = entry.saving || loading;
+    b.disabled = bulkBusy || entry.saving || loading;
     b.onclick = function (e) {
       e.stopPropagation();
       decide(entry, next);
@@ -272,20 +305,22 @@ summary { cursor: pointer; font-weight: 600; }
     if (entry.status === 'approved') {
       var add = document.createElement('button');
       add.type = 'button'; add.className = 'btn'; add.textContent = '加入詞庫';
-      add.disabled = entry.saving || loading;
+      add.disabled = bulkBusy || entry.saving || loading;
       add.onclick = function (e) {
         e.stopPropagation();
         $('dictionary-panel').open = true;
         $('dictionary-text').value = entry.word.text;
         $('dictionary-reading').value = '';
         $('dictionary-message').textContent = '請確認完整注音後加入詞庫。';
+        invalidateLookup();
+        lookupDictionary();
         $('dictionary-reading').focus();
       };
       act.appendChild(add);
     }
     var remove = document.createElement('button');
     remove.type = 'button'; remove.className = 'btn no'; remove.textContent = '刪除';
-    remove.disabled = entry.saving || loading;
+    remove.disabled = bulkBusy || entry.saving || loading;
     remove.onclick = function (e) { e.stopPropagation(); deleteSubmission(entry); };
     act.appendChild(remove);
     var state = document.createElement('span');
@@ -297,7 +332,7 @@ summary { cursor: pointer; font-weight: 600; }
   }
 
   function decide(entry, next, follow) {
-    if (loading || entry.saving || entry.status === next) return;
+    if (bulkBusy || loading || entry.saving || entry.status === next) return;
     var previous = entry.status;
     entry.order = ++decisionOrder;
     entry.status = next;
@@ -360,7 +395,12 @@ summary { cursor: pointer; font-weight: 600; }
         tr.appendChild(cell('muted', formatTime(w.last_seen)));
 
         var act = cell('act', '');
-        var entry = { word: w, status: w.status || requestedStatus, row: tr, actions: act };
+        var check = document.createElement('input');
+        check.type = 'checkbox'; check.className = 'word-check'; check.setAttribute('aria-label', '勾選 ' + w.text);
+        check.onclick = function (e) { e.stopPropagation(); };
+        check.onchange = updateControls;
+        var checkCell = cell('check', ''); checkCell.appendChild(check); tr.insertBefore(checkCell, tr.firstChild);
+        var entry = { word: w, status: w.status || requestedStatus, row: tr, actions: act, check: check };
         renderActions(entry);
         tr.onclick = function () { select(entries.indexOf(entry), true); };
         tr.addEventListener('focus', function () { select(entries.indexOf(entry), false); });
@@ -410,11 +450,17 @@ summary { cursor: pointer; font-weight: 600; }
   }
 
   var dictionaryBusy = false;
+  var checkedDictionaryText = null;
+  var lookupGeneration = 0;
   function dictionaryControls(busy) {
     dictionaryBusy = busy;
     $('dictionary-form').querySelectorAll('input, button').forEach(function (el) { el.disabled = busy; });
     $('dictionary-words').querySelectorAll('button').forEach(function (el) { el.disabled = busy; });
     $('dictionary-refresh').disabled = busy;
+    $('dictionary-save').disabled = busy || checkedDictionaryText !== $('dictionary-text').value.trim();
+    $('dictionary-select-all').disabled = busy;
+    $('dictionary-words').querySelectorAll('input').forEach(function (el) { el.disabled = busy; });
+    updateDictionarySelection();
   }
   function loadDictionary() {
     return api('/api/admin/lexicon').then(function (data) {
@@ -423,19 +469,22 @@ summary { cursor: pointer; font-weight: 600; }
         var item = document.createElement('li');
         var label = document.createElement('span');
         label.textContent = word.text + ' · ' + word.reading + ' · 詞頻 ' + word.frequency + ' ';
-        item.appendChild(label);
+        var check = document.createElement('input'); check.type = 'checkbox'; check.className = 'dictionary-check'; check.word = word;
+        check.setAttribute('aria-label', '勾選 ' + word.text + ' ' + word.reading); check.onchange = updateDictionarySelection;
+        item.appendChild(check); item.appendChild(label);
         var remove = document.createElement('button');
         remove.type = 'button'; remove.className = 'btn no'; remove.textContent = '刪除詞庫項目';
         remove.onclick = function () {
           if (dictionaryBusy || !window.confirm('從正式詞庫刪除「' + word.text + '」（' + word.reading + '）？變更會隨下次詞庫發布生效。')) return;
           dictionaryControls(true);
           api('/api/admin/lexicon', { method: 'DELETE', body: JSON.stringify(word) })
-            .then(function () { item.remove(); $('dictionary-message').textContent = '已刪除，將於下次詞庫發布生效。'; })
+            .then(function () { item.remove(); updateDictionarySelection(); invalidateLookup(); $('dictionary-message').textContent = '已刪除，將於下次詞庫發布生效。'; })
             .catch(function (error) { $('dictionary-message').textContent = '刪除失敗：' + error.message; })
             .finally(function () { dictionaryControls(false); });
         };
         item.appendChild(remove); $('dictionary-words').appendChild(item);
       });
+      updateDictionarySelection();
     });
   }
   $('dictionary-refresh').onclick = function () {
@@ -446,14 +495,129 @@ summary { cursor: pointer; font-weight: 600; }
   };
   $('dictionary-form').onsubmit = function (event) {
     event.preventDefault();
-    if (dictionaryBusy) return;
+    if (dictionaryBusy || checkedDictionaryText !== $('dictionary-text').value.trim()) return;
     var word = { text: $('dictionary-text').value.trim(), reading: $('dictionary-reading').value.trim(), frequency: Number($('dictionary-frequency').value) };
     dictionaryControls(true);
     api('/api/admin/lexicon', { method: 'POST', body: JSON.stringify(word) }).then(function () {
+      invalidateLookup();
       $('dictionary-message').textContent = '「' + word.text + '」已加入正式詞庫，將隨下一版 App 提供。';
       return loadDictionary().catch(function () { $('dictionary-message').textContent += ' 清單更新失敗，請重新載入。'; });
-    }).catch(function (error) { $('dictionary-message').textContent = '加入失敗：' + error.message; })
+    }).catch(function (error) { invalidateLookup(); $('dictionary-message').textContent = '加入失敗：' + error.message; })
       .finally(function () { dictionaryControls(false); });
+  };
+
+
+  function invalidateLookup() {
+    lookupGeneration++;
+    checkedDictionaryText = null;
+    $('dictionary-save').disabled = true;
+  }
+  $('dictionary-text').oninput = function () {
+    invalidateLookup();
+    $('dictionary-message').textContent = '請先查詢此詞是否存在。';
+  };
+  function lookupDictionary() {
+    if (dictionaryBusy) return;
+    invalidateLookup();
+    var request = lookupGeneration, text = $('dictionary-text').value.trim();
+    if (!text) { $('dictionary-message').textContent = '請先輸入要查詢的詞。'; return; }
+    dictionaryControls(true);
+    $('dictionary-message').textContent = '查詢中…';
+    return api('/api/admin/lexicon?text=' + encodeURIComponent(text)).then(function (result) {
+      if (request !== lookupGeneration || text !== $('dictionary-text').value.trim()) return;
+      if (result.exists) {
+        $('dictionary-message').textContent = '已存在，不能重複加入：' + result.matches.map(function (m) { return (m.source === 'builtin' ? '內建詞庫' : '後台詞庫') + '（' + m.reading + '）'; }).join('、');
+      } else {
+        checkedDictionaryText = text;
+        $('dictionary-message').textContent = '查無此詞，可以填寫完整注音後加入詞庫。';
+      }
+    }).catch(function (error) {
+      if (request === lookupGeneration) $('dictionary-message').textContent = '查詢失敗，尚不能新增：' + error.message;
+    }).finally(function () { dictionaryControls(false); });
+  }
+  $('dictionary-lookup').onclick = lookupDictionary;
+
+  function selectedEntries() {
+    return entries.filter(function (e) { return !e.row.hidden && e.status === status && e.check.checked; });
+  }
+  $('select-all').onchange = function () {
+    entries.forEach(function (e) { e.check.checked = !e.row.hidden && e.status === status && $('select-all').checked; });
+    updateControls();
+  };
+  async function bulkReview(action) {
+    if (loading || saving) return;
+    var chosen = selectedEntries();
+    if (!chosen.length) return;
+    if (action === 'delete' && !window.confirm('刪除勾選的 ' + chosen.length + ' 個詞的上傳紀錄？之後同步不會重新加入待審；正式詞庫不受影響。')) return;
+    bulkBusy = true; saving++; updateControls(); entries.forEach(renderActions);
+    try {
+      if (action === 'prepare') {
+        var result = await api('/api/admin/bulk', { method: 'POST', body: JSON.stringify({ action: 'lexicon-check', words: chosen.map(function (e) { return e.word.text; }) }) });
+        queuedWords = [];
+        $('bulk-dictionary-rows').textContent = '';
+        result.words.forEach(function (word) {
+          var row = document.createElement('p');
+          var label = document.createElement('label'); label.textContent = word.text + ' ';
+          row.appendChild(label);
+          if (word.matches.length) {
+            label.appendChild(document.createTextNode('已存在，不加入：' + word.matches.map(function (m) { return m.reading; }).join('、')));
+          } else {
+            var reading = document.createElement('input'); reading.required = true; reading.placeholder = '完整注音，以空格分隔'; reading.setAttribute('aria-label', word.text + '的完整注音');
+            label.appendChild(reading);
+            queuedWords.push({ text: word.text, input: reading });
+          }
+          $('bulk-dictionary-rows').appendChild(row);
+        });
+        $('bulk-dictionary-form').hidden = false;
+        $('bulk-dictionary-message').textContent = '查無結果 ' + queuedWords.length + ' 個詞；請確認完整注音。';
+      } else {
+        await api('/api/admin/bulk', { method: 'POST', body: JSON.stringify({ action: action, words: chosen.map(function (e) { return e.word.text; }) }) });
+        saving--; bulkBusy = false;
+        await load();
+        $('review-message').textContent = '已完成 ' + chosen.length + ' 個詞的批次操作。';
+        return;
+      }
+    } catch (error) { $('review-message').textContent = '批次操作失敗：' + error.message; }
+    finally {
+      if (bulkBusy) { bulkBusy = false; saving--; }
+      updateControls(); entries.forEach(renderActions);
+    }
+  }
+  document.querySelectorAll('.bulk-action').forEach(function (b) { b.onclick = function () { bulkReview(b.dataset.action); }; });
+  $('bulk-dictionary-form').onsubmit = async function (event) {
+    event.preventDefault();
+    if (saving || loading || !queuedWords.length) return;
+    bulkBusy = true; saving++; updateControls();
+    try {
+      await api('/api/admin/bulk', { method: 'POST', body: JSON.stringify({ action: 'lexicon-add', words: queuedWords.map(function (w) { return { text: w.text, reading: w.input.value.trim(), frequency: 2000 }; }) }) });
+      $('bulk-dictionary-message').textContent = '已加入 ' + queuedWords.length + ' 個詞，將隨下一版 App 提供。';
+      queuedWords = []; invalidateLookup();
+    } catch (error) { $('bulk-dictionary-message').textContent = '整批未加入：' + error.message; }
+    finally { bulkBusy = false; saving--; updateControls(); }
+  };
+
+  function dictionaryChecks() { return Array.from($('dictionary-words').querySelectorAll('.dictionary-check')); }
+  function updateDictionarySelection() {
+    var checks = dictionaryChecks(), count = checks.filter(function (c) { return c.checked; }).length;
+    $('dictionary-delete-selected').disabled = dictionaryBusy || !count;
+    $('dictionary-delete-selected').textContent = '刪除勾選項目（' + count + '）';
+    $('dictionary-select-all').checked = !!checks.length && count === checks.length;
+    $('dictionary-select-all').indeterminate = count > 0 && count < checks.length;
+  }
+  $('dictionary-select-all').onchange = function () {
+    var on = this.checked; dictionaryChecks().forEach(function (c) { c.checked = on; }); updateDictionarySelection();
+  };
+  $('dictionary-delete-selected').onclick = async function () {
+    if (dictionaryBusy) return;
+    var checks = dictionaryChecks().filter(function (c) { return c.checked; });
+    if (!checks.length || !window.confirm('從正式詞庫刪除勾選的 ' + checks.length + ' 個項目？變更會隨下次詞庫發布生效。')) return;
+    dictionaryControls(true);
+    try {
+      await api('/api/admin/bulk', { method: 'POST', body: JSON.stringify({ action: 'lexicon-delete', words: checks.map(function (c) { return c.word; }) }) });
+      checks.forEach(function (c) { c.parentNode.remove(); }); invalidateLookup();
+      $('dictionary-message').textContent = '已刪除 ' + checks.length + ' 個詞庫項目。';
+    } catch (error) { $('dictionary-message').textContent = '整批未刪除：' + error.message; }
+    finally { dictionaryControls(false); }
   };
 
   document.querySelectorAll('.tabs button').forEach(function (b) {
@@ -478,7 +642,7 @@ summary { cursor: pointer; font-weight: 600; }
   };
 
   document.addEventListener('keydown', function (e) {
-    if ($('review').hidden || loading || e.isComposing || e.keyCode === 229 || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if ($('review').hidden || bulkBusy || loading || e.isComposing || e.keyCode === 229 || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     var key = e.key.toLowerCase();
     if (key === 'arrowdown' || key === 'arrowup') {

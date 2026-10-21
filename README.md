@@ -75,3 +75,17 @@ LB_ADMIN_PASSWORD=… scripts/approved-words.py    # 通過的詞寫進詞庫
 ## 授權
 
 程式碼 MIT。詞庫 [libchewing-data](https://github.com/chewing/libchewing-data)（LGPL-2.1+）；詞組 FineWeb-2（ODC-By）。見 [DATA_LICENSES.md](DATA_LICENSES.md)。
+
+### 後台詞庫查詢與發布
+
+後台新增詞前會比對內建詞庫索引與正式詞庫資料庫，查無結果才允許新增；相同詞即使讀音不同也不能重複新增。批次操作只影響目前清單勾選的項目，不會隱含選取其他篩選結果。
+
+正式詞庫變更仍需同步到下一版 App。發布前依序執行：
+
+```sh
+python3 scripts/approved-words.py
+python3 scripts/gen-admin-lexicon.py
+npm --prefix website test
+```
+
+`gen-admin-lexicon.py` 使用 `data/tsi.csv` 與 `lexicon-adjustments.csv`，更新後台查詢用的內建詞庫索引；可用 `--source` 指定來源。索引沿用新酷音詞庫的授權，詳見 `DATA_LICENSES.md`。詞庫調整後未更新索引會讓測試失敗，避免查詢結果與發布內容不同步。

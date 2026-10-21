@@ -173,23 +173,67 @@ test('deleting a submission is authenticated and prevents hourly uploads from re
   assert.equal((await db.query('SELECT * FROM device_syncs WHERE device = $1', [device(71)])).rows.length, 1);
 });
 
-test('curated words require full readings, support multiple readings, export and delete independently', async () => {
+test('lookup covers builtin and curated words; existing text cannot be inserted again', async () => {
   const { default: lexicon } = await import('../api/admin/lexicon.js');
   const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
   const cookie = signed.headers['set-cookie'].split(';')[0];
-  const word = { text: '貢丸湯', reading: 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ', frequency: 2000 };
+  const word = { text: '測試新增詞甲', reading: 'ㄘㄜˋ ㄕˋ ㄒㄧㄣ ㄗㄥ ㄘˊ ㄐㄧㄚˇ', frequency: 2000 };
   for (const method of ['GET', 'POST', 'DELETE']) assert.equal((await call(lexicon, { method, body: word })).status, 401);
-  for (const reading of ['ㄍㄨㄊ', 'abc', 'ㄍ ㄨ', 'ㄍㄍ ㄨ ㄊ', 'ㄍ ㄨ ㄊ']) {
+  const builtin = await call(lexicon, { cookie, query: { text: '你好' } });
+  assert.equal(builtin.body.exists, true);
+  assert.ok(builtin.body.matches.some(w => w.source === 'builtin'));
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: { text: '你好', reading: 'ㄋㄧˇ ㄏㄠˇ' } })).status, 409);
+  assert.equal((await call(lexicon, { cookie, query: { text: word.text } })).body.exists, false);
+  for (const reading of ['abc', 'ㄍ ㄨ ㄊ ㄍ ㄨ ㄊ']) {
     assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, reading } })).status, 400);
   }
   assert.equal((await call(lexicon, { method: 'POST', cookie, body: word })).status, 204);
-  assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, frequency: 2500 } })).status, 204);
-  const alternate = { ...word, reading: 'ㄍㄨㄥ ㄨㄢˊ ㄊㄤ' };
-  await call(lexicon, { method: 'POST', cookie, body: alternate });
-  const list = await call(lexicon, { cookie });
-  assert.equal(list.body.words.length, 2);
-  assert.equal(list.body.words.find(w => w.reading === word.reading).frequency, 2500);
-  assert.equal((await call(exportWords, { cookie })).body.lexicon.length, 2);
-  assert.equal((await call(lexicon, { method: 'DELETE', cookie, body: alternate })).status, 204);
-  assert.deepEqual((await call(exportWords, { cookie })).body.lexicon, [{ ...word, frequency: 2500 }]);
+  assert.equal((await call(lexicon, { cookie, query: { text: word.text } })).body.matches[0].source, 'curated');
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, frequency: 2500 } })).status, 409);
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: { ...word, reading: word.reading.replace('ㄐㄧㄚˇ', 'ㄐㄧㄚˊ') } })).status, 409);
+  assert.deepEqual((await call(exportWords, { cookie })).body.lexicon, [word]);
+  assert.equal((await call(lexicon, { method: 'DELETE', cookie, body: word })).status, 204);
+  assert.equal((await call(lexicon, { cookie, query: { text: word.text } })).body.exists, false);
+  assert.equal((await call(lexicon, { method: 'POST', cookie, body: word })).status, 204, 'deleted term can be explicitly re-added');
+});
+
+test('batch review is authenticated, validates the whole request and deletes without resurrection', async () => {
+  const { default: bulk } = await import('../api/admin/bulk.js');
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const cookie = signed.headers['set-cookie'].split(';')[0];
+  const texts = ['批次測試甲', '批次測試乙'];
+  await call(upload, { method: 'POST', body: { device: device(80), app: '7.0', words: texts.map(text => ({ text, typed: 'ㄆㄘㄘㄕ', count: 2 })) } });
+  const apply = (action, words = texts) => call(bulk, { method: 'POST', cookie, body: { action, words } });
+  assert.equal((await call(bulk, { method: 'POST', body: { action: 'approved', words: texts } })).status, 401);
+  assert.equal((await apply('approved', [])).status, 400);
+  assert.equal((await apply('approved', [texts[0], '不存在的詞甲'])).status, 409);
+  assert.equal((await db.query('SELECT * FROM decisions WHERE text = ANY($1::text[])', [texts])).rows.length, 0);
+  assert.equal((await apply('approved')).status, 204);
+  assert.equal((await db.query('SELECT * FROM decisions WHERE text = ANY($1::text[])', [texts])).rows.length, 2);
+  assert.equal((await apply('rejected')).status, 204);
+  assert.equal((await apply('pending')).status, 204);
+  assert.equal((await apply('delete')).status, 204);
+  await call(upload, { method: 'POST', body: { device: device(80), app: '7.0', words: texts.map(text => ({ text, typed: 'ㄆㄘㄘㄕ', count: 3 })) } });
+  assert.equal((await db.query('SELECT * FROM submissions WHERE text = ANY($1::text[])', [texts])).rows.length, 0);
+});
+
+test('batch dictionary add rejects any duplicate or invalid row without partial writes', async () => {
+  const { default: bulk } = await import('../api/admin/bulk.js');
+  const { default: lexicon } = await import('../api/admin/lexicon.js');
+  const signed = await call(login, { method: 'POST', body: { email: 'ino@noky.dev', password: 'right horse' } });
+  const cookie = signed.headers['set-cookie'].split(';')[0];
+  const words = [
+    { text: '批次新詞甲', reading: 'ㄆㄧ ㄘˋ ㄒㄧㄣ ㄘˊ ㄐㄧㄚˇ', frequency: 2000 },
+    { text: '批次新詞乙', reading: 'ㄆㄧ ㄘˋ ㄒㄧㄣ ㄘˊ ㄧˇ', frequency: 2000 },
+  ];
+  const apply = (action, entries) => call(bulk, { method: 'POST', cookie, body: { action, words: entries } });
+  assert.equal((await apply('lexicon-add', [words[0], { text: '你好', reading: 'ㄋㄧˇ ㄏㄠˇ' }])).status, 409);
+  assert.equal((await apply('lexicon-add', [words[0], { ...words[1], reading: 'bad' }])).status, 400);
+  assert.equal((await call(lexicon, { cookie, query: { text: words[0].text } })).body.exists, false);
+  assert.equal((await apply('lexicon-add', words)).status, 204);
+  const lookup = await apply('lexicon-check', words.map(w => w.text));
+  assert.ok(lookup.body.words.every(w => w.matches.length === 1));
+  assert.equal((await apply('lexicon-delete', words)).status, 204);
+  assert.equal((await call(lexicon, { cookie, query: { text: words[0].text } })).body.exists, false);
+  assert.equal((await apply('lexicon-add', words)).status, 204);
 });

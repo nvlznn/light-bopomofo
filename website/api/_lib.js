@@ -23,6 +23,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS lexicon_entries (
      text text NOT NULL, reading text NOT NULL, frequency integer NOT NULL DEFAULT 2000,
      updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (text, reading))`,
+  `CREATE TABLE IF NOT EXISTS lexicon_terms (text text PRIMARY KEY)`,
+  `INSERT INTO lexicon_terms (text) SELECT DISTINCT text FROM lexicon_entries ON CONFLICT DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS deleted_words (text text PRIMARY KEY)`,
   `CREATE TABLE IF NOT EXISTS submissions (
      device text NOT NULL,

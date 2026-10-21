@@ -190,21 +190,103 @@ test('delete removes just the selected submission after server success', async (
   assert.equal(p.rows()[0].querySelector('.word').textContent, words[1].text);
 });
 
-test('approved word can be added with a reviewed reading, then deleted from the dictionary', async () => {
+test('approved word requires a successful lookup before adding, then can be deleted', async () => {
   const p = await page();
   p.key('a'); p.requests[1].resolve(response(null, 204)); await tick();
   [...p.rows()[0].querySelectorAll('button')].find(b => b.textContent === '加入詞庫').click();
   assert.equal(p.document.getElementById('dictionary-text').value, words[0].text);
+  assert.equal(p.document.getElementById('dictionary-save').disabled, true);
+  assert.match(p.requests[2].url, /lexicon\?text=/);
+  p.requests[2].resolve(response({ text: words[0].text, exists: false, matches: [] })); await tick();
   p.document.getElementById('dictionary-reading').value = 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ';
   p.document.getElementById('dictionary-form').onsubmit({ preventDefault() {} });
   const word = { text: words[0].text, reading: 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ', frequency: 2000 };
-  assert.deepEqual(JSON.parse(p.requests[2].options.body), word);
-  p.requests[2].resolve(response(null, 204)); await tick();
-  assert.equal(p.requests[3].url, '/api/admin/lexicon');
-  p.requests[3].resolve(response({ words: [word] })); await tick();
+  assert.deepEqual(JSON.parse(p.requests[3].options.body), word);
+  p.requests[3].resolve(response(null, 204)); await tick();
+  assert.equal(p.requests[4].url, '/api/admin/lexicon');
+  p.requests[4].resolve(response({ words: [word] })); await tick();
   assert.match(p.document.getElementById('dictionary-message').textContent, /已加入正式詞庫/);
   p.document.querySelector('#dictionary-words button').click();
-  assert.equal(p.requests[4].options.method, 'DELETE');
-  p.requests[4].resolve(response(null, 204)); await tick();
+  assert.equal(p.requests[5].options.method, 'DELETE');
+  p.requests[5].resolve(response(null, 204)); await tick();
   assert.equal(p.document.getElementById('dictionary-words').children.length, 0);
+});
+
+function chooseAll(p) {
+  const box = p.document.getElementById('select-all'); box.checked = true; box.onchange();
+}
+
+test('lookup blocks existing words, fails closed, and changing text requires another lookup', async () => {
+  const p = await page(), input = p.document.getElementById('dictionary-text');
+  input.value = '你好'; input.oninput();
+  p.document.getElementById('dictionary-lookup').click();
+  p.requests[1].resolve(response({ exists: true, matches: [{ source: 'builtin', reading: 'ㄋㄧˇ ㄏㄠˇ' }] })); await tick();
+  assert.equal(p.document.getElementById('dictionary-save').disabled, true);
+  assert.match(p.document.getElementById('dictionary-message').textContent, /內建詞庫/);
+  input.value = '新詞測試'; input.oninput(); p.document.getElementById('dictionary-lookup').click();
+  p.requests[2].resolve(response({ error: 'offline' }, 503)); await tick();
+  assert.equal(p.document.getElementById('dictionary-save').disabled, true);
+  p.document.getElementById('dictionary-lookup').click();
+  p.requests[3].resolve(response({ exists: false, matches: [] })); await tick();
+  assert.equal(p.document.getElementById('dictionary-save').disabled, false);
+  input.value = '其他詞'; input.oninput();
+  assert.equal(p.document.getElementById('dictionary-save').disabled, true);
+  p.document.getElementById('dictionary-form').onsubmit({ preventDefault() {} });
+  assert.equal(p.requests.length, 4);
+});
+
+test('batch review sends selected words once, retains selection on failure, and clears it on reload', async () => {
+  const p = await page(); chooseAll(p);
+  assert.match(p.document.getElementById('selected-count').textContent, /3/);
+  p.document.querySelector('[data-action="approved"]').click();
+  assert.deepEqual(JSON.parse(p.requests[1].options.body), { action: 'approved', words: words.map(w => w.text) });
+  p.key('a'); assert.equal(p.requests.length, 2, 'shortcuts disabled during batch');
+  p.requests[1].resolve(response({ error: 'offline' }, 503)); await tick();
+  assert.equal(p.rows().filter(r => r.querySelector('.word-check').checked).length, 3);
+  p.document.querySelector('[data-action="approved"]').click();
+  p.requests[2].resolve(response(null, 204)); await tick();
+  p.requests[3].resolve(response(data([]))); await tick();
+  assert.match(p.document.getElementById('selected-count').textContent, /0/);
+});
+
+test('batch dictionary preparation excludes existing words and submits only reviewed missing words', async () => {
+  const p = await page();
+  p.document.querySelector('[data-status="approved"]').click();
+  p.requests[1].resolve(response({ ...data(words.map(w => ({ ...w, status: 'approved' }))), status: 'approved' })); await tick();
+  chooseAll(p); p.document.querySelector('[data-action="prepare"]').click();
+  assert.equal(JSON.parse(p.requests[2].options.body).action, 'lexicon-check');
+  p.requests[2].resolve(response({ words: words.map((w, i) => ({ text: w.text, matches: i ? [] : [{ reading: 'ㄍㄨㄥˋ ㄨㄢˊ ㄊㄤ', source: 'builtin' }] })) })); await tick();
+  const inputs = [...p.document.querySelectorAll('#bulk-dictionary-rows input')];
+  assert.equal(inputs.length, 2);
+  inputs[0].value = 'ㄨㄛˇ ㄒㄧㄤˇ ㄔ ㄈㄢˋ'; inputs[1].value = 'ㄔㄣˊ ㄒㄧㄠˇ ㄇㄟˇ';
+  p.document.getElementById('bulk-dictionary-form').onsubmit({ preventDefault() {} });
+  assert.deepEqual(JSON.parse(p.requests[3].options.body).words.map(w => w.text), words.slice(1).map(w => w.text));
+  p.requests[3].resolve(response(null, 204)); await tick();
+  assert.match(p.document.getElementById('bulk-dictionary-message').textContent, /已加入 2/);
+  assert.equal(p.document.getElementById('bulk-dictionary-save').disabled, true);
+});
+
+test('dictionary batch deletion keeps rows on error and deletes selected rows only on success', async () => {
+  const p = await page();
+  const items = [{ text: '詞甲', reading: 'ㄘˊ ㄐㄧㄚˇ', frequency: 2000 }, { text: '詞乙', reading: 'ㄘˊ ㄧˇ', frequency: 2000 }];
+  p.document.getElementById('dictionary-refresh').click();
+  p.requests[1].resolve(response({ words: items })); await tick();
+  const box = p.document.querySelector('.dictionary-check'); box.checked = true; box.onchange();
+  p.document.getElementById('dictionary-delete-selected').click();
+  assert.deepEqual(JSON.parse(p.requests[2].options.body), { action: 'lexicon-delete', words: [items[0]] });
+  p.requests[2].resolve(response({ error: 'offline' }, 503)); await tick();
+  assert.equal(p.document.querySelectorAll('.dictionary-check').length, 2);
+  assert.equal(box.checked, true);
+  p.document.getElementById('dictionary-delete-selected').click();
+  p.requests[3].resolve(response(null, 204)); await tick();
+  assert.equal(p.document.querySelectorAll('.dictionary-check').length, 1);
+  assert.match(p.document.getElementById('dictionary-words').textContent, /詞乙/);
+});
+
+test('switching review tabs clears checked words so hidden selections cannot be processed', async () => {
+  const p = await page(); chooseAll(p);
+  p.document.querySelector('[data-status="rejected"]').click();
+  p.requests[1].resolve(response({ words: [{ ...words[0], status: 'rejected' }], counts: { rejected: 1 } })); await tick();
+  assert.match(p.document.getElementById('selected-count').textContent, /0/);
+  assert.equal(p.document.querySelector('[data-action="delete"]').disabled, true);
 });
