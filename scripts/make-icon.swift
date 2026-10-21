@@ -1,6 +1,8 @@
 // Draws the icons.
 //   swift scripts/make-icon.swift menu macos/IME/Resources/icon.tiff
 //       input-source icon (template): glyph cut out of a rounded rectangle
+//   swift scripts/make-icon.swift switcher macos/IME/Resources/switcher.tiff
+//       the input method's icon, shown by the switcher: the glyph alone
 //   swift scripts/make-icon.swift app macos/App/Resources/AppIcon.icns
 //       app icon: white rounded square with a black glyph
 //   swift scripts/make-icon.swift ico windows/lightbopomofo.ico
@@ -36,8 +38,9 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
 /// The glyph cut out of a filled rounded rectangle, as System Settings draws
 /// Apple's Chinese input sources (倉 拼 寫 雙), measured from a screenshot:
 /// 22 × 16 pt, 5 pt corners, the glyph's ink 11.25 × 10 pt (as wide and
-/// tall as 倉's), centred.
-func menuIcon(_ out: String) {
+/// tall as 倉's), centred. Without `badge`, the glyph alone, as the input
+/// source switcher draws Apple's 注.
+func menuIcon(_ out: String, badge: Bool = true) {
     let glyph = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [
         .font: NSFont.systemFont(ofSize: 100, weight: .medium),
     ]))
@@ -53,10 +56,12 @@ func menuIcon(_ out: String) {
         rep.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSColor.black.setFill()
-        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 5, yRadius: 5).fill()
         let context = NSGraphicsContext.current!.cgContext
-        context.setBlendMode(.destinationOut)
+        if badge {
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 5, yRadius: 5).fill()
+            context.setBlendMode(.destinationOut)
+        }
         context.translateBy(x: size.width / 2 - ink.midX * scaleX, y: size.height / 2 - ink.midY * scaleY)
         context.scaleBy(x: scaleX, y: scaleY)
         context.textPosition = .zero
@@ -141,9 +146,10 @@ func windowsIcon(_ out: String, sizes: [Int], rep: (Int) -> NSBitmapImageRep) {
 
 switch CommandLine.arguments[1] {
 case "menu": menuIcon(CommandLine.arguments[2])
+case "switcher": menuIcon(CommandLine.arguments[2], badge: false)
 case "app": appIcon(CommandLine.arguments[2])
 case "ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64, 256], rep: appIconRep)
 case "input-ico": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep(.white))
 case "input-ico-light": windowsIcon(CommandLine.arguments[2], sizes: [16, 20, 24, 32, 40, 48, 64], rep: inputIconRep(.black))
-default: fatalError("usage: make-icon.swift menu|app|ico|input-ico|input-ico-light OUTPUT")
+default: fatalError("usage: make-icon.swift menu|switcher|app|ico|input-ico|input-ico-light OUTPUT")
 }
