@@ -48,7 +48,16 @@ extension Key {
         {
             return .other
         }
-        if flags.contains(.capsLock) { return .abandon }  // Caps Lock types English
+        // Caps Lock types English as ABC does: lowercase, Shift for capitals
+        // (the app would type the capitals Caps Lock locks in).
+        if flags.contains(.capsLock) {
+            if let ch = event.charactersIgnoringModifiers, ch.count == 1,
+               let letter = ch.first, letter.isASCII, letter.isLetter
+            {
+                return .english(flags.contains(.shift) ? ch.uppercased() : ch.lowercased())
+            }
+            return .abandon
+        }
         switch event.keyCode {
         case 49: return .symbol(Composer.firstTone)  // space
         case 36, 76: return .commit  // return, keypad enter

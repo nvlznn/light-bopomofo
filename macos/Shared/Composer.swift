@@ -16,6 +16,7 @@ enum Key: Equatable {
     case punctuation(String)
     case other  // anything else: commit the composition, then let the app have it
     case abandon  // switched to English (Caps Lock): drop the composition, let the app have it
+    case english(String)  // a letter with Caps Lock on: drop the composition, type it (lowercase, as in ABC)
 }
 
 struct KeyResult: Equatable {
@@ -144,6 +145,9 @@ final class Composer {
         case .abandon:
             reset()
             return KeyResult(handled: false)
+        case .english(let text):
+            reset()
+            return KeyResult(handled: true, commit: text)
         }
     }
 

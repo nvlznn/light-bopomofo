@@ -110,6 +110,9 @@ do {
     check(key(0, both, "a") == .other, "Shift+Option+letter goes to the app")
     check(key(125, .numericPad, "") == .down && key(126, .numericPad, "") == .up, "↓ ↑")
     check(key(123, .numericPad, "") == .previous && key(124, .numericPad, "") == .next, "← →")
+    check(key(0, .capsLock, "A") == .english("a"), "Caps Lock types lowercase")
+    check(key(0, [.capsLock, .shift], "A") == .english("A"), "Caps Lock+Shift types uppercase")
+    check(key(18, .capsLock, "1") == .abandon, "Caps Lock passes other keys")
 }
 
 // ↓ expands the candidates into a grid of 6 columns.
@@ -232,6 +235,9 @@ do {
     type(c, "ㄋㄏㄇ")
     check(c.handle(.abandon) == KeyResult(handled: false), "abandon passes the key")
     check(c.isEmpty && c.candidates.isEmpty, "abandon drops the composition")
+    type(c, "ㄋㄏㄇ")
+    check(c.handle(.english("a")) == KeyResult(handled: true, commit: "a"), "Caps Lock letter types itself")
+    check(c.isEmpty && c.candidates.isEmpty, "Caps Lock letter drops the composition")
 }
 
 // Very long input flushes instead of growing without bound.
