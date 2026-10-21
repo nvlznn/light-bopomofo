@@ -513,7 +513,7 @@ footer a { color: var(--ink2); }
 
   <section class="band" id="download">
     <div class="wrap">
-      <div class="head reveal"><h2>免費下載</h2><p>免費・開源・選字紀錄留在你的電腦</p></div>
+      <div class="head reveal"><h2>免費下載</h2><p>目前版本：<a id="release-version" href="https://github.com/nvlznn/light-bopomofo/releases/tag/v6.0">v6.0</a></p><p>免費・開源・選字紀錄留在你的電腦</p></div>
       <div class="dl reveal">
         <div class="card glass main-dl" id="dl-main"></div>
         <div class="card glass gh">
@@ -1039,6 +1039,14 @@ footer a { color: var(--ink2); }
   liveLoop();
 
   // ---------- OS detection + downloads ----------
+  if (window.fetch) {
+    fetch('https://api.github.com/repos/nvlznn/light-bopomofo/releases/latest').then(function (r) { return r.ok ? r.json() : null; }).then(function (release) {
+      if (!release || typeof release.tag_name !== 'string' || !release.tag_name) return;
+      var version = $('release-version');
+      version.textContent = release.tag_name;
+      version.href = 'https://github.com/nvlznn/light-bopomofo/releases/tag/' + encodeURIComponent(release.tag_name);
+    }).catch(function () {});
+  }
   var REL = 'https://github.com/nvlznn/light-bopomofo/releases/latest/download/';
   var PLATFORMS = {
     mac: { name: 'macOS', icon: 'i-apple', href: REL + 'LightBopomofo.dmg', req: 'macOS 13 以上・Apple Silicon 與 Intel', ready: true },
