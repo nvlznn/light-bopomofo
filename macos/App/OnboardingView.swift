@@ -683,10 +683,10 @@ private struct AddStep: View {
             Title(text: "加入輕注音", chip: "設定")
                 .padding(.top, 34)
             VStack(alignment: .leading, spacing: 14) {
-                SetupStep(number: 1, text: "打開系統設定的「鍵盤」，按「編輯…」")
+                SetupStep(number: 1, text: "打開「系統設定」→「鍵盤」，按「輸入方式」旁的「編輯…」")
                 HStack(alignment: .top, spacing: 14) {
-                    SetupStep(number: 2, text: "按左下角「＋」")
-                    SetupStep(number: 3, text: "選「輕注音」，按「加入」")
+                    SetupStep(number: 2, text: "在跳出的視窗，\n按左下角「＋」")
+                    SetupStep(number: 3, text: "左邊選「繁體中文」，右邊選「輕注音」，按「加入」")
                 }
             }
             .padding(.top, 16)
@@ -715,10 +715,12 @@ private struct AddStep: View {
     }
 }
 
-/// One step of adding 輕注音: number and words, its screenshot (setup-N.png) below.
+/// One step of adding 輕注音: number and words, its screenshot (setup-N.png)
+/// below; a click shows the screenshot large.
 private struct SetupStep: View {
     let number: Int
     let text: String
+    @State private var enlarged = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -736,10 +738,25 @@ private struct SetupStep: View {
             if let url = Bundle.main.url(forResource: "setup-\(number)", withExtension: "png"),
                let image = NSImage(contentsOf: url)
             {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Button { enlarged = true } label: {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("點一下放大")
+                .onHover { inside in
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+                .popover(isPresented: $enlarged) {
+                    // Screenshots are @2x: half their pixels, at most 640 pt wide.
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: min(image.size.width / 2, 640))
+                        .padding(10)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
