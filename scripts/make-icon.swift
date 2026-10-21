@@ -33,11 +33,25 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
     text.draw(at: NSPoint(x: (box - s.width) / 2, y: (box - s.height) / 2 + dy))
 }
 
+/// The glyph cut out of a filled rounded square, like Apple's Chinese input
+/// sources (TCIM's cangjie.tiff, zhuyin.tiff), matched pixel for pixel:
+/// 16 pt square, 2.375 pt corners, the glyph's ink 11 pt across and centred.
 func menuIcon(_ out: String) {
+    let font = NSFont.systemFont(ofSize: 100, weight: .medium)
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [.font: font]))
+    let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+    let scale = 11 / max(ink.width, ink.height)
     let image = NSImage(size: NSSize(width: 16, height: 16))
     for px in [16, 32] {
         image.addRepresentation(bitmap(px, points: 16) {
-            glyph(size: 14.5, color: .black, in: 16, weight: .medium, dy: 0.5)
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: 16, height: 16), xRadius: 2.375, yRadius: 2.375).fill()
+            let context = NSGraphicsContext.current!.cgContext
+            context.setBlendMode(.destinationOut)
+            context.translateBy(x: 8 - ink.midX * scale, y: 8 - ink.midY * scale)
+            context.scaleBy(x: scale, y: scale)
+            context.textPosition = .zero
+            CTLineDraw(line, context)
         })
     }
     try! image.tiffRepresentation(using: .lzw, factor: 1)!.write(to: URL(fileURLWithPath: out))
