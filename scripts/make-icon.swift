@@ -35,17 +35,14 @@ func glyph(size: CGFloat, color: NSColor, in box: CGFloat, weight: NSFont.Weight
 
 /// The glyph cut out of a filled rounded rectangle, as System Settings draws
 /// Apple's Chinese input sources (倉 拼 寫 雙), measured from a screenshot:
-/// 22 × 16 pt, 5 pt corners, the glyph at the size that makes 倉 9.5 pt
-/// tall, centred.
+/// 22 × 16 pt, 5 pt corners, the glyph's ink 11.25 × 10 pt (as wide and
+/// tall as 倉's), centred.
 func menuIcon(_ out: String) {
-    func line(_ text: String) -> CTLine {
-        CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: 100, weight: .medium),
-        ]))
-    }
-    let scale = 9.5 / CTLineGetBoundsWithOptions(line("倉"), .useGlyphPathBounds).height
-    let glyph = line("輕")
+    let glyph = CTLineCreateWithAttributedString(NSAttributedString(string: "輕", attributes: [
+        .font: NSFont.systemFont(ofSize: 100, weight: .medium),
+    ]))
     let ink = CTLineGetBoundsWithOptions(glyph, .useGlyphPathBounds)
+    let scaleX = 11.25 / ink.width, scaleY = 10 / ink.height
     let size = NSSize(width: 22, height: 16)
     let image = NSImage(size: size)
     for factor in [1, 2] {
@@ -60,8 +57,8 @@ func menuIcon(_ out: String) {
         NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 5, yRadius: 5).fill()
         let context = NSGraphicsContext.current!.cgContext
         context.setBlendMode(.destinationOut)
-        context.translateBy(x: size.width / 2 - ink.midX * scale, y: size.height / 2 - ink.midY * scale)
-        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: size.width / 2 - ink.midX * scaleX, y: size.height / 2 - ink.midY * scaleY)
+        context.scaleBy(x: scaleX, y: scaleY)
         context.textPosition = .zero
         CTLineDraw(glyph, context)
         NSGraphicsContext.restoreGraphicsState()

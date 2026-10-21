@@ -24,13 +24,13 @@
 		<dict>
 			<key>dev.noky.inputmethod.lightbopomofo.Bopomofo</key>
 			<dict>
-				<key>TISIconIsTemplate</key>
-				<true/>
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
 					<string>輕</string>
 				</dict>
+				<key>TISInputSourceID</key>
+				<string>dev.noky.inputmethod.lightbopomofo.lightbopomofo.Bopomofo</string>
 				<key>TISIntendedLanguage</key>
 				<string>zh-Hant</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
