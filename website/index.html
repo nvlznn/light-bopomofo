@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>輕注音輸入法 Light Bopomofo｜簡拼注音輸入法，支援 macOS、Windows</title>
-<meta name="description" content="注音簡拼輸入法：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」，打法和 iPhone 注音一樣。會記住你常打的字。支援 macOS 與 Windows，免費、開源。">
+<title>輕注音輸入法 Light Bopomofo｜模糊輸入、簡拼注音輸入法，支援 macOS、Windows</title>
+<meta name="description" content="像手機一樣模糊輸入的注音輸入法：注音不用打完整，不打聲調、只打前面幾個注音都行，ㄋㄧㄏㄠ 就是「你好」，ㄕㄖㄎㄌ 是「生日快樂」。會記住你常打的字。支援 macOS 與 Windows，免費、開源。">
 <link rel="canonical" href="https://lightbopomofo.noky.dev/">
 <meta property="og:title" content="輕注音輸入法">
-<meta property="og:description" content="注音簡拼：每個字只打第一個注音。ㄋㄏㄇ → 你好嗎。免費、開源。">
+<meta property="og:description" content="注音不用打完整，像手機一樣模糊輸入。ㄕㄖㄎㄌ → 生日快樂。免費、開源。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lightbopomofo.noky.dev/">
 <meta property="og:site_name" content="輕注音輸入法">
@@ -18,7 +18,7 @@
   "@type": "SoftwareApplication",
   "name": "輕注音輸入法",
   "alternateName": ["輕注音", "Light Bopomofo"],
-  "description": "支援簡拼的注音輸入法：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」。",
+  "description": "像手機一樣模糊輸入的注音輸入法：注音不用打完整，不打聲調、只打前面幾個注音都能打出整句。",
   "url": "https://lightbopomofo.noky.dev/",
   "downloadUrl": "https://github.com/nvlznn/light-bopomofo/releases/latest",
   "applicationCategory": "UtilitiesApplication",
@@ -26,7 +26,7 @@
   "inLanguage": "zh-Hant",
   "license": "https://opensource.org/licenses/MIT",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" },
-  "featureList": ["注音簡拼：每個字只打第一個注音", "也能打完整注音", "整句一次打完", "記住常打的字"]
+  "featureList": ["模糊輸入：注音不用打完整", "不打聲調也行", "每個字只打前面幾個注音（簡拼）也行", "整句一次打完", "記住常打的字"]
 }
 </script>
 <script type="application/ld+json">
@@ -37,12 +37,12 @@
     {
       "@type": "Question",
       "name": "電腦有沒有像手機一樣，不用打完整注音的輸入法？",
-      "acceptedAnswer": { "@type": "Answer", "text": "有。輕注音輸入法是 macOS 與 Windows 的注音簡拼輸入法：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」、ㄕㄖㄎㄌ 是「生日快樂」，打法和 iPhone 注音一樣。免費、開源。" }
+      "acceptedAnswer": { "@type": "Answer", "text": "有。輕注音輸入法是 macOS 與 Windows 的注音輸入法，像手機一樣能模糊輸入：注音不用打完整，不打聲調、每個字只打前面幾個注音都行。ㄋㄧㄏㄠ 就是「你好」，ㄕㄖㄎㄌ 是「生日快樂」。免費、開源。" }
     },
     {
       "@type": "Question",
-      "name": "什麼是注音簡拼？",
-      "acceptedAnswer": { "@type": "Answer", "text": "每個字只打第一個注音，由輸入法猜出整句。也可以混著打完整注音，打得越完整越準；選過的字會記住，下次排第一。" }
+      "name": "什麼是模糊輸入？",
+      "acceptedAnswer": { "@type": "Answer", "text": "注音不用打完整也能打出字：可以不打聲調，也可以每個字只打前面幾個注音，甚至只打第一個（簡拼），由輸入法猜出整句。打得越完整越準；選過的字會記住，下次排第一。" }
     },
     {
       "@type": "Question",
@@ -467,7 +467,7 @@ footer a { color: var(--ink2); }
 <main>
   <section class="hero wrap">
     <h1>輕注音<b>輸入法</b></h1>
-    <p class="sub">每個字只打第一個注音（簡拼），像在手機上打字。</p>
+    <p class="sub">注音不用打完整，像在手機上打字。</p>
     <div class="cta" id="hero-cta"></div>
 
     <div class="stage" id="stage" aria-label="打字示範">
@@ -543,7 +543,7 @@ footer a { color: var(--ink2); }
     <div class="wrap">
       <div class="head reveal"><h2>整句一次打完</h2><p>不用一個字一個字選。</p></div>
       <div class="numbers">
-        <div class="num glass reveal"><span class="n">01</span><h3>只打第一個注音</h3><p class="eg">ㄕㄖㄎㄌ</p></div>
+        <div class="num glass reveal"><span class="n">01</span><h3>注音不用打完整</h3><p class="eg">ㄕㄖㄎㄌ</p></div>
         <div class="num glass reveal"><span class="n">02</span><h3>整句自己出來</h3><p>生日快樂</p></div>
         <div class="num glass reveal"><span class="n">03</span><h3>不對就選前面</h3><p>剩下的接著選</p></div>
       </div>
@@ -569,11 +569,11 @@ footer a { color: var(--ink2); }
       <div class="faq glass reveal">
         <details>
           <summary>電腦有沒有像手機一樣，不用打完整注音的輸入法？</summary>
-          <p>有。輕注音輸入法是 macOS 與 Windows 的注音簡拼輸入法：每個字只打第一個注音，<b>ㄋㄏㄇ</b> 就是「你好嗎」、<b>ㄕㄖㄎㄌ</b> 是「生日快樂」，打法和 iPhone 注音一樣。免費、開源。</p>
+          <p>有。輕注音輸入法是 macOS 與 Windows 的注音輸入法，像手機一樣能模糊輸入：注音不用打完整，不打聲調、每個字只打前面幾個注音都行。<b>ㄋㄧㄏㄠ</b> 就是「你好」，<b>ㄕㄖㄎㄌ</b> 是「生日快樂」。免費、開源。</p>
         </details>
         <details>
-          <summary>什麼是注音簡拼？</summary>
-          <p>每個字只打第一個注音，由輸入法猜出整句。也可以混著打完整注音，打得越完整越準；選過的字會記住，下次排第一。</p>
+          <summary>什麼是模糊輸入？</summary>
+          <p>注音不用打完整也能打出字：可以不打聲調，也可以每個字只打前面幾個注音，甚至只打第一個（簡拼），由輸入法猜出整句。打得越完整越準；選過的字會記住，下次排第一。</p>
         </details>
         <details>
           <summary>要錢嗎？</summary>
