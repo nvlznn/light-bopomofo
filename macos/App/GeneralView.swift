@@ -171,7 +171,7 @@ private struct StatusCard: View {
     private var detail: String {
         switch model.status {
         case .checking: return ""
-        case .ready: return "在選單列的輸入法選單選「輕注音」就可以開始打字。"
+        case .ready: return "在選單列的輸入法選單選「輕注音」就可以開始打字。切換不了的話，到「輸入方式」移除再重新加入。"
         case .notEnabled: return "手動加入：① 打開「系統設定」→「鍵盤」，在「文字輸入」按「輸入方式」旁的「編輯…」 ② 按左下角「＋」，左邊選「中文（繁體）」 ③ 選「輕注音」按「加入」。加好這裡會自動更新。"
         case .newerInstalled(_, let bundled): return "這個 App 內含的是 \(bundled)，不會覆蓋較新的版本。請改用新版的 App。"
         case .notInstalled: return "按「安裝」把輸入法裝到你的使用者資料夾，不需要管理員密碼。"

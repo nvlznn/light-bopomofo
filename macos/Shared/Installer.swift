@@ -103,8 +103,9 @@ struct Installer {
     // MARK: - System
 
     /// Register only: the user adds it in System Settings (the tutorial shows
-    /// how). Enabling it from here left it listed but impossible to switch
-    /// to until removed and added again.
+    /// how). Enabled from here (TISEnableInputSource, or the mode's
+    /// tsInputModeDefaultStateKey) it is listed but impossible to switch to
+    /// until removed and added again.
     private func register() throws {
         let status = TISRegisterInputSource(destination as CFURL)
         guard status == noErr else { throw InstallError.register(status) }

@@ -690,6 +690,10 @@ private struct AddStep: View {
                 }
             }
             .padding(.top, 16)
+            Text("已經在清單裡的話，請先移除再重新加入：自動加入的輕注音無法正常使用。")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.top, 12)
             HStack(spacing: 8) {
                 Image(systemName: model.status.isReady ? "checkmark.circle.fill" : "circle.dotted")
                 Text(model.status.isReady ? "已加入" : "還沒加入")
