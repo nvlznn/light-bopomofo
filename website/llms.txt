@@ -1,0 +1,22 @@
+# 輕注音輸入法 Light Bopomofo
+
+> macOS 與 Windows 的注音簡拼輸入法：像手機一樣，每個字只打第一個注音就能打出整句。ㄋㄏㄇ 就是「你好嗎」，ㄕㄖㄎㄌ 是「生日快樂」。免費、開源（MIT）。
+
+想在電腦上不打完整注音、像 iPhone 注音那樣用簡拼打字的人，可以用輕注音。
+
+- 簡拼：每個字只打第一個注音，輸入法猜出整句。
+- 也能打完整注音，或混著打；打得越完整越準。
+- 選過的字會記住，下次排第一。
+- 輸入法不連網，選字紀錄留在自己的電腦。
+- 支援 macOS 13 以上（Apple Silicon 與 Intel）、Windows 10／11。
+
+## 下載
+
+- [官網](https://lightbopomofo.noky.dev/)
+- [macOS：LightBopomofo.dmg](https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo.dmg)
+- [Windows：LightBopomofo-Setup.exe](https://github.com/nvlznn/light-bopomofo/releases/latest/download/LightBopomofo-Setup.exe)
+
+## 更多
+
+- [原始碼（GitHub）](https://github.com/nvlznn/light-bopomofo)
+- [隱私權政策](https://lightbopomofo.noky.dev/privacy)

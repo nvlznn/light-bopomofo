@@ -25,7 +25,31 @@
   "operatingSystem": "macOS 13+, Windows 10, Windows 11",
   "inLanguage": "zh-Hant",
   "license": "https://opensource.org/licenses/MIT",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" }
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" },
+  "featureList": ["注音簡拼：每個字只打第一個注音", "也能打完整注音", "整句一次打完", "記住常打的字"]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "電腦有沒有像手機一樣，不用打完整注音的輸入法？",
+      "acceptedAnswer": { "@type": "Answer", "text": "有。輕注音輸入法是 macOS 與 Windows 的注音簡拼輸入法：每個字只打第一個注音，ㄋㄏㄇ 就是「你好嗎」、ㄕㄖㄎㄌ 是「生日快樂」，打法和 iPhone 注音一樣。免費、開源。" }
+    },
+    {
+      "@type": "Question",
+      "name": "什麼是注音簡拼？",
+      "acceptedAnswer": { "@type": "Answer", "text": "每個字只打第一個注音，由輸入法猜出整句。也可以混著打完整注音，打得越完整越準；選過的字會記住，下次排第一。" }
+    },
+    {
+      "@type": "Question",
+      "name": "要錢嗎？",
+      "acceptedAnswer": { "@type": "Answer", "text": "不用。輕注音完全免費，原始碼以 MIT 授權公開在 GitHub。" }
+    }
+  ]
 }
 </script>
 <meta name="theme-color" content="#f6f8fb">
@@ -543,6 +567,18 @@ footer a { color: var(--ink2); }
       </div>
 
       <div class="faq glass reveal">
+        <details>
+          <summary>電腦有沒有像手機一樣，不用打完整注音的輸入法？</summary>
+          <p>有。輕注音輸入法是 macOS 與 Windows 的注音簡拼輸入法：每個字只打第一個注音，<b>ㄋㄏㄇ</b> 就是「你好嗎」、<b>ㄕㄖㄎㄌ</b> 是「生日快樂」，打法和 iPhone 注音一樣。免費、開源。</p>
+        </details>
+        <details>
+          <summary>什麼是注音簡拼？</summary>
+          <p>每個字只打第一個注音，由輸入法猜出整句。也可以混著打完整注音，打得越完整越準；選過的字會記住，下次排第一。</p>
+        </details>
+        <details>
+          <summary>要錢嗎？</summary>
+          <p>不用。輕注音完全免費，原始碼以 MIT 授權公開在 GitHub。</p>
+        </details>
         <details>
           <summary>macOS 安裝</summary>
           <ol>
