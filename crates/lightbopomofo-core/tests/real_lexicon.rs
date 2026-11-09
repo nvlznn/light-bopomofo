@@ -79,6 +79,27 @@ fn learned_characters_do_not_beat_a_spelled_out_word() {
 }
 
 #[test]
+fn learned_characters_are_not_strung_into_a_second_whole() {
+    let mut history = History::in_memory();
+    for (typed, text, times) in [
+        ("ㄦ", "而", 17),
+        ("ㄋㄧ", "你", 144),
+        ("ㄑㄧㄝ", "切", 4),
+        ("ㄏㄠˋ", "號", 1),
+    ] {
+        for _ in 0..times {
+            history.record(&[(typed, text)]);
+        }
+    }
+    let e = engine_with_history(history);
+    for (input, junk) in [("ㄦㄑㄧㄝ", ["而切", "爾切"]), ("ㄋㄧㄏㄠ", ["你號", "你豪"])] {
+        let c = e.query_str(input);
+        let t = texts(&c[..5]);
+        assert!(junk.iter().all(|j| !t.contains(j)), "{input}: {t:?}");
+    }
+}
+
+#[test]
 fn single_character_is_reachable_after_abbreviated_words() {
     // Like the iPhone: common words for the whole input, then characters.
     let t = top("ㄋㄏ", 15);

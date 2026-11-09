@@ -141,6 +141,9 @@ pub const PAIR_BEAM: usize = 8;
 /// Whole conversions offered from the search with word pairs (then the plain
 /// one, without pairs, if different).
 pub const PAIR_WHOLES: usize = 2;
+/// Past the first, a whole conversion with two single characters side by
+/// side is offered only within this much of the first.
+pub const LOOSE_WHOLE_MARGIN: f64 = 0.5;
 /// A curated shortcut gets this extra lift in the search with word pairs.
 /// Learned words already have a span-local lift; rewarding each learned piece
 /// here would make a string of learned characters beat a spelled-out word.
@@ -323,7 +326,8 @@ impl Engine {
 
         let mut candidates = Vec::new();
         // The whole conversion. With word pairs, also the next best whole
-        // path and the plain one (without pairs), in case the pairs mislead.
+        // path and the plain one (without pairs), in case the pairs mislead;
+        // not those stringing loose characters together (而切 for 而且).
         let plain = self.viterbi(input, &best);
         if with_pairs {
             for whole in self
@@ -332,7 +336,12 @@ impl Engine {
                 .take(PAIR_WHOLES)
                 .chain([plain])
             {
-                if !candidates.iter().any(|c: &Candidate| c.text == whole.text) {
+                let close = candidates
+                    .first()
+                    .is_none_or(|c: &Candidate| whole.score >= c.score - LOOSE_WHOLE_MARGIN);
+                if (close || !strings_chars(&whole))
+                    && !candidates.iter().any(|c: &Candidate| c.text == whole.text)
+                {
                     candidates.push(whole);
                 }
             }
@@ -796,6 +805,14 @@ impl Engine {
             words,
         }
     }
+}
+
+/// Whether a whole conversion has two single characters side by side.
+fn strings_chars(whole: &Candidate) -> bool {
+    whole
+        .words
+        .windows(2)
+        .any(|pair| pair.iter().all(|w| w.text.chars().count() == 1))
 }
 
 /// Score of the best path of edges covering input[start..end].
